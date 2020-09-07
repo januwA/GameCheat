@@ -1,61 +1,36 @@
-## GameCheat 内部作弊常用的函数
+## GameCheat::GC 内部作弊常用的函数
 
-```
+```c++
 #include "pch.h"
 #include <iostream>
-#include <Windows.h>
-#include <Psapi.h>
-#include <TlHelp32.h>
 #include "GameCheat.h"
 
 using namespace std;
 
 DWORD WINAPI MyThread(HMODULE hModule)
 {
-	GameCheat gc{ "PlantsVsZombies.exe" };
-	FILE* f;
-	gc.openConsole(&f);
-	printf("INJECT OK\n");
+  GameCheat::GC gc{ "PlantsVsZombies.exe" };
+  FILE* f;
+  gc.openConsole(&f);
 
-	BYTE* addr = (BYTE*)(gc.mi.lpBaseOfDll) + 0x33F86;
+  // "PlantsVsZombies.exe" + 33F86: 89 B7 78 55 00 00 - mov [edi + 00005578], esi
+  vector<BYTE> codes = {
+    0x81, 0xC6, 0xE8, 0x03, 0x00, 0x00, // add esi,000003E8
+    0x89, 0xB7, 0x78, 0x55, 0x00, 0x00 // mov [edi+00005578],esi
+  };
+  GameCheat::SetHook SetHook;
+  bool pSuccess = gc.moduleScan("89 B7 78 55 00 00", codes, &SetHook);
+  while (!GetAsyncKeyState(VK_END))
+  {
+    if (GetAsyncKeyState(VK_F4) & 1)
+      SetHook.toggle();
 
-	// ---------- INJECTING HERE ----------
-	// "PlantsVsZombies.exe" + 33F86: 89 B7 78 55 00 00 - mov[edi + 00005578], esi
-	// ---------- DONE INJECTING  ----------
-	vector<BYTE> codes = {
-		0x81, 0xC6, 0xE8, 0x03, 0x00, 0x00, // add esi,000003E8
-		0x89, 0xB7, 0x78, 0x55, 0x00, 0x00 // mov [edi+00005578],esi
-	};
-	SetHookStruct setHookStruct;
-	bool pSuccess = gc.moduleScan("89 B7 78 55 00 00", codes, &setHookStruct);
-	while (true)
-	{
-		if (GetAsyncKeyState(VK_F4) & 1)
-		{
-			if (pSuccess)
-			{
-				setHookStruct.toggle();
-				if (setHookStruct.bEnable)
-				{
-					printf("开启\n");
-				}
-				else {
-					printf("关闭\n");
-				}
-			}
-		}
+    Sleep(10);
+  }
 
-		if (GetAsyncKeyState(VK_F12) & 1)
-		{
-			break;
-		}
-
-		Sleep(20);
-	}
-
-	gc.closeConsole(f);
-	FreeLibraryAndExitThread(hModule, 0);
-	return 0;
+  gc.closeConsole(f);
+  FreeLibraryAndExitThread(hModule, 0);
+  return 0;
 }
 ```
 
@@ -163,11 +138,11 @@ void __stdcall playerAndEnemyHP_h(GameCheat::Regs regs)
 int WINAPI Mythread(HMODULE hModule)
 {
 
-  GameCheat gc{ "sekiro.exe" };
+  GameCheat::GC gc{ "sekiro.exe" };
   FILE* f;
   gc.openConsole(&f);
 
-  GameCheat::SetHookStruct playerAndEnemyHP;
+  GameCheat::SetHook playerAndEnemyHP;
   playerAndEnemyHP.msg = "player And Enemy HP";
 
   vector<BYTE*> addrs = gc.moduleScan("C1 8B 00 89 83 30 01 00 00", 3);
@@ -191,7 +166,7 @@ int WINAPI Mythread(HMODULE hModule)
 ```
 
 
-# EetNop Exanmpe
+# SetNop Exanmpe
 
 ## AAScript
 ```
@@ -221,14 +196,14 @@ using namespace std;
 int WINAPI Mythread(HMODULE hModule)
 {
 
-  GameCheat gc{ "Tutorial-x86_64.exe" };
+  GameCheat::GC gc{ "Tutorial-x86_64.exe" };
   FILE* f;
   gc.openConsole(&f);
   
   BYTE* addr = (BYTE*)gc.mi.lpBaseOfDll + 0x2B08C;
 
-  GameCheat::SetNopStruct setNop;
-  setNop.bSuccess = gc.setNop(addr, 6, &setNop);
+  GameCheat::SetNop setNop;
+  setNop.bSuccess = gc.setNop(addr, 6, &setNop); // OR: gc.setNopRVA(0x2B08C, 6, &setNop);
 
   while (!GetAsyncKeyState(VK_END))
   {
