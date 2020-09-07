@@ -27,11 +27,11 @@ GameCheat::~GameCheat()
     CloseHandle(hProcess);
 }
 
-bool GameCheat::setNop(uintptr_t addr, size_t size, SetNopStruct* setNopStruct)
+bool GameCheat::setNop(BYTE* addr, size_t size, SetNopStruct* setNopStruct)
 {
   vector<BYTE> origenBytes = {};
   origenBytes.resize(size);
-  memcpy_s(origenBytes.data(), size, (BYTE*)addr, size);
+  memcpy_s(origenBytes.data(), size, addr, size);
 
   setNopStruct->origenBytes = origenBytes;
   setNopStruct->addr = addr;
@@ -84,7 +84,7 @@ bool GameCheat::setHook(BYTE* addr, size_t size, vector<BYTE> hookBytes, SetHook
 
 bool GameCheat::moduleScan(vector<BYTE> bytes, size_t offset, size_t size, vector<BYTE> hookBytes, SetHookStruct* setHookStruct, string mask)
 {
-  vector<BYTE*> addrs = moduleScan(bytes, mask);
+  vector<BYTE*> addrs = moduleScan(bytes, mask, offset);
   if (addrs.size() == 0)
   {
     printf("MosuleScan Error: 扫描失败，未找到字节集.\n");
@@ -95,7 +95,7 @@ bool GameCheat::moduleScan(vector<BYTE> bytes, size_t offset, size_t size, vecto
 
 bool GameCheat::moduleScan(vector<BYTE> bytes, size_t offset, size_t size, vector<BYTE> hookBytes, SetHookStruct* setHookStruct)
 {
-  vector<BYTE*> addrs = moduleScan(bytes);
+  vector<BYTE*> addrs = moduleScan(bytes, offset);
   if (addrs.size() == 0)
   {
     printf("MosuleScan Error: 扫描失败，未找到字节集.\n");
@@ -146,70 +146,40 @@ bool GameCheat::moduleScan(string bytes, vector<BYTE> hookBytes, SetHookStruct* 
   return moduleScan(byteStr2Bytes(bytes), hookBytes, setHookStruct);
 }
 
-vector<BYTE*> GameCheat::moduleScan(vector<BYTE> bytes, string mask)
-{
-  BYTE* base = (BYTE*)mi.lpBaseOfDll;
-  uintptr_t imageSize = mi.SizeOfImage;
-  size_t bytesSize = bytes.size();
-  vector<BYTE*> addrs = {};
-
-  vector<string> maskList = string_split(string_trim(mask), regex("\\s+"));
-  if (maskList.size() != bytes.size())
-  {
-    printf("%s\n", "mask与bytes长度不相等.");
-    return addrs;
-  }
-
-  for (size_t i = 0; i < imageSize - bytesSize; i++)
-  {
-    bool found = true;
-    for (size_t j = 0; j < bytesSize; j++)
-    {
-      if (bytes[j] != *(base + i + j) && maskList[j] != "?" && maskList[j] != "*")
-      {
-        found = false;
-        break;
-      }
-    }
-    if (found) addrs.push_back(base + i);
-
-  }
-  return addrs;
-}
-
 vector<BYTE*> GameCheat::moduleScan(vector<BYTE> bytes)
 {
-  BYTE* base = (BYTE*)mi.lpBaseOfDll;
-  uintptr_t imageSize = mi.SizeOfImage;
-  size_t bytesSize = bytes.size();
-  vector<BYTE*> addrs = {};
-
-  for (size_t i = 0; i < imageSize - bytesSize; i++)
-  {
-    bool found = true;
-    for (size_t j = 0; j < bytesSize; j++)
-    {
-      if (bytes[j] != *(base + i + j))
-      {
-        found = false;
-        break;
-      }
-    }
-    if (found) addrs.push_back(base + i);
-
-  }
-  return addrs;
+  return _moduleScan(bytes, "", 0);
 }
-
-vector<BYTE*> GameCheat::moduleScan(string bytes, string mask)
+vector<BYTE*> GameCheat::moduleScan(vector<BYTE> bytes, string mask)
 {
-  return moduleScan(byteStr2Bytes(bytes), mask);
+  return _moduleScan(bytes, mask, 0);
+}
+vector<BYTE*> GameCheat::moduleScan(vector<BYTE> bytes, size_t offset)
+{
+  return _moduleScan(bytes, "", offset);
+}
+vector<BYTE*> GameCheat::moduleScan(vector<BYTE> bytes, string mask, size_t offset)
+{
+  return _moduleScan(bytes, mask, offset);
 }
 
 vector<BYTE*> GameCheat::moduleScan(string bytes)
 {
   return moduleScan(byteStr2Bytes(bytes));
 }
+vector<BYTE*> GameCheat::moduleScan(string bytes, size_t offset)
+{
+  return moduleScan(byteStr2Bytes(bytes), offset);
+}
+vector<BYTE*> GameCheat::moduleScan(string bytes, string mask)
+{
+  return moduleScan(byteStr2Bytes(bytes), mask);
+}
+vector<BYTE*> GameCheat::moduleScan(string bytes, string mask, size_t offset)
+{
+  return moduleScan(byteStr2Bytes(bytes), mask, offset);
+}
+
 
 bool GameCheat::callHook(BYTE* addr, size_t size, BYTE* hook, SetHookStruct* setHookStruct)
 {
@@ -527,4 +497,40 @@ LPVOID GameCheat::getVirtualAlloc(size_t size)
     newmems.push_back((BYTE*)newmem);
 
   return newmem;
+}
+
+vector<BYTE*> GameCheat::_moduleScan(vector<BYTE> bytes, string mask, size_t offset)
+{
+  BYTE* base = (BYTE*)mi.lpBaseOfDll;
+  uintptr_t imageSize = mi.SizeOfImage;
+  size_t bytesSize = bytes.size();
+  vector<BYTE*> addrs = {};
+  
+  bool hasMask = !mask.empty();
+  vector<string> maskList;
+  if (hasMask)
+  {
+    maskList = string_split(string_trim(mask), regex("\\s+"));
+    if (maskList.size() != bytes.size())
+    {
+      printf("%s\n", "mask与bytes长度不相等.");
+      return addrs;
+    }
+  }
+
+  for (size_t i = 0; i < imageSize - bytesSize; i++)
+  {
+    bool found = true;
+    for (size_t j = 0; j < bytesSize; j++)
+    {
+      bool notEqual = hasMask ? bytes[j] != *(base + i + j) && maskList[j] != "?" && maskList[j] != "*" : bytes[j] != *(base + i + j);
+      if (notEqual)
+      {
+        found = false;
+        break;
+      }
+    }
+    if (found) addrs.push_back(base + i + offset);
+  }
+  return addrs;
 }

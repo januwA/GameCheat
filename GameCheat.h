@@ -16,23 +16,46 @@ public:
   struct SetNopStruct
   {
     vector<BYTE> origenBytes = {};
-    uintptr_t addr;
+    BYTE* addr;
     size_t size;
     bool bEnable = false;
+
+    bool bSuccess = false;
+    string msg = "";
+
     void enable()
     {
+      if (!bSuccess)
+      {
+        printf("[NoSuccess] %s\n", msg.c_str());
+        return;
+      }
+
       DWORD oldProc;
-      VirtualProtect((BYTE*)addr, size, PAGE_EXECUTE_READWRITE, &oldProc);
-      memset((BYTE*)addr, 0x90, size);
-      VirtualProtect((BYTE*)addr, size, oldProc, 0);
+      VirtualProtect(addr, size, PAGE_EXECUTE_READWRITE, &oldProc);
+      memset(addr, 0x90, size);
+      VirtualProtect(addr, size, oldProc, 0);
+      if (!msg.empty())
+        printf("[enable]  %s\n", msg.c_str());
     }
+
     void disable()
     {
+      if (!bSuccess)
+      {
+        printf("[NoSuccess] %s\n", msg.c_str());
+        return;
+      }
+
       DWORD oldProc;
-      VirtualProtect((BYTE*)addr, size, PAGE_EXECUTE_READWRITE, &oldProc);
-      _memccpy((BYTE*)addr, (BYTE*)(origenBytes.data()), 0, size);
-      VirtualProtect((BYTE*)addr, size, oldProc, 0);
+      VirtualProtect(addr, size, PAGE_EXECUTE_READWRITE, &oldProc);
+      _memccpy(addr, (BYTE*)(origenBytes.data()), 0, size);
+      VirtualProtect(addr, size, oldProc, 0);
+
+      if (!msg.empty())
+        printf("[disable] %s\n", msg.c_str());
     }
+
     void toggle()
     {
       bEnable = !bEnable;
@@ -48,21 +71,41 @@ public:
     BYTE* hookAddr;
     DWORD jmpHookBytes;
     bool bEnable = false;
+
+    bool bSuccess = false;
+    string msg = "";
+
     void enable()
     {
+      if (!bSuccess)
+      {
+        printf("[NoSuccess] %s\n", msg.c_str());
+        return;
+      }
       DWORD oldProc;
       VirtualProtect(addr, size, PAGE_EXECUTE_READWRITE, &oldProc);
       memset(addr, 0x90, size);
       *addr = 0xE9;
       *(DWORD*)(addr + 1) = jmpHookBytes;
       VirtualProtect(addr, size, oldProc, 0);
+
+      if (!msg.empty())
+        printf("[enable]  %s\n", msg.c_str());
     }
     void disable()
     {
+      if (!bSuccess)
+      {
+        printf("[NoSuccess] %s\n", msg.c_str());
+        return;
+      }
+
       DWORD oldProc;
       VirtualProtect(addr, size, PAGE_EXECUTE_READWRITE, &oldProc);
       memcpy_s(addr, size, origenBytes.data(), size);
       VirtualProtect(addr, size, oldProc, 0);
+      if (!msg.empty())
+        printf("[disable] %s\n", msg.c_str());
     }
     void toggle()
     {
@@ -399,16 +442,14 @@ public:
   /*
   * 将字节集替换为nop
 
-  ```
-  SetNopStruct setNopData;
-  gc.setNop(0x401575, 5, &setNopData);
-  if (GetAsyncKeyState(VK_F4) & 1)
-  {
-    reset.toggle();
-  }
+  ```c++
+    BYTE* addr = (BYTE*)gc.mi.lpBaseOfDll + 0x2B08C;
+    GameCheat::SetNopStruct setNop;
+    setNop.bSuccess = gc.setNop(addr, 6, &setNop);
+    setNop.toggle();
   ```
   */
-  bool setNop(uintptr_t addr, size_t size, SetNopStruct* setNopStruct);
+  bool setNop(BYTE* addr, size_t size, SetNopStruct* setNopStruct);
 
   /*
   * ## 绕行挂钩 失败返回false
@@ -495,14 +536,19 @@ public:
   }
   ```
   */
-  vector<BYTE*> moduleScan(vector<BYTE> bytes, string mask);
   vector<BYTE*> moduleScan(vector<BYTE> bytes);
-  vector<BYTE*> moduleScan(string bytes, string mask);
+  vector<BYTE*> moduleScan(vector<BYTE> bytes, size_t offset);
+  vector<BYTE*> moduleScan(vector<BYTE> bytes, string mask);
+  vector<BYTE*> moduleScan(vector<BYTE> bytes, string mask, size_t offset);
   vector<BYTE*> moduleScan(string bytes);
+  vector<BYTE*> moduleScan(string bytes, size_t offset);
+  vector<BYTE*> moduleScan(string bytes, string mask);
+  vector<BYTE*> moduleScan(string bytes, string mask, size_t offset);
 
   /*
-  # 使用这个函数挂钩Hook函数, 函数可以获取寄存器列表
-  ```c++
+  * # 使用这个函数挂钩Hook函数, 函数可以获取寄存器列表
+
+  * ```c++
   void __stdcall myHook(GameCheat::Regs* regs)
   {
   #ifdef _WIN64
@@ -556,7 +602,11 @@ public:
 private:
   /* 在x64如果指针不在2-4GB则无法跳转 */
   BYTE* registerHookAddrBase = 0;
-
+  
+  /*
+  * 扫描内存，返回地址
+  */
+  vector<BYTE*> _moduleScan(vector<BYTE> bytes, string mask, size_t offset);
 };
 
 template<class T>
