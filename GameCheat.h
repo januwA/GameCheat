@@ -357,6 +357,8 @@ namespace GameCheat
       resultSplitList.emplace_back(iterStart, iterEnd);
       return resultSplitList;
     }
+
+    /* "01 02" to { 0x01, 0x02 } */
     static vector<BYTE> byteStr2Bytes(string byteStr)
     {
       byteStr = string_trim(byteStr);
@@ -384,8 +386,13 @@ namespace GameCheat
 
     /* 申请的所有虚拟内存地址 */
     vector<BYTE*> newmems = {};
+
     GC(string gameName);
     ~GC();
+
+
+    template<class T>
+    T* getAddress(vector<uintptr_t> offsets);
 
     /*
     ```
@@ -603,20 +610,25 @@ namespace GameCheat
   };
 
   template<class T>
-  inline void GC::setValue(vector<uintptr_t> offsets, T newValue)
+  inline T* GC::getAddress(vector<uintptr_t> offsets)
   {
     if (offsets.size() == 1)
-    {
-      *(T*)offsets.at(0) = newValue;
-      return;
-    }
-    uintptr_t addr = offsets.at(0);
+      return (T*)offsets[0];
+
+    uintptr_t addr = offsets[0];
     for (size_t i = 1; i < offsets.size() - 1; i++)
     {
-      addr += offsets.at(i);
+      addr += offsets[i];
       addr = *(uintptr_t*)addr;
     }
-    *(T*)(addr + offsets.back()) = newValue;
+    return (T*)(addr + offsets.back());
+  }
+
+  template<class T>
+  inline void GC::setValue(vector<uintptr_t> offsets, T newValue)
+  {
+    T* pv = getAddress<T>(offsets);
+    *pv = newValue;
   }
 
   template<class T>
@@ -628,18 +640,8 @@ namespace GameCheat
   template<class T>
   inline T GC::getValue(vector<uintptr_t> offsets)
   {
-    if (offsets.size() == 1)
-    {
-      return *(T*)offsets.at(0);
-    }
-    uintptr_t addr = offsets.at(0);
-    for (size_t i = 1; i < offsets.size() - 1; i++)
-    {
-      addr += offsets.at(i);
-      addr = *(uintptr_t*)addr;
-    }
-    T r = *(T*)(addr + offsets.back());
-    return r;
+    T* pv = getAddress<T>(offsets);
+    return *pv;
   }
 
   template<class T>

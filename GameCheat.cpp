@@ -44,7 +44,7 @@ bool GameCheat::GC::setNopRVA(uintptr_t addrRVA, size_t size, SetNop* setNopData
   return setNop((BYTE*)mi.lpBaseOfDll + addrRVA, size, setNopData);
 }
 
-bool GameCheat::GC::setHook(BYTE* addr, size_t size, vector<BYTE> hookBytes, SetHook* SetHook)
+bool GameCheat::GC::setHook(BYTE* addr, size_t size, vector<BYTE> hookBytes, SetHook* setHookData)
 {
   if (size < 5)
   {
@@ -79,15 +79,15 @@ bool GameCheat::GC::setHook(BYTE* addr, size_t size, vector<BYTE> hookBytes, Set
   // 5. 脱钩/disable
 
   DWORD jmpHookBytes = newmem - addr - 5;
-  SetHook->origenBytes = origenBytes;
-  SetHook->addr = addr;
-  SetHook->size = size;
-  SetHook->hookAddr = newmem;
-  SetHook->jmpHookBytes = jmpHookBytes;
+  setHookData->origenBytes = origenBytes;
+  setHookData->addr = addr;
+  setHookData->size = size;
+  setHookData->hookAddr = newmem;
+  setHookData->jmpHookBytes = jmpHookBytes;
   return true;
 }
 
-bool GameCheat::GC::moduleScan(vector<BYTE> bytes, size_t offset, size_t size, vector<BYTE> hookBytes, SetHook* SetHook, string mask)
+bool GameCheat::GC::moduleScan(vector<BYTE> bytes, size_t offset, size_t size, vector<BYTE> hookBytes, SetHook* setHookData, string mask)
 {
   vector<BYTE*> addrs = moduleScan(bytes, mask, offset);
   if (addrs.size() == 0)
@@ -95,10 +95,9 @@ bool GameCheat::GC::moduleScan(vector<BYTE> bytes, size_t offset, size_t size, v
     printf("MosuleScan Error: 扫描失败，未找到字节集.\n");
     return false;
   }
-  return setHook(addrs[0], size, hookBytes, SetHook);
+  return setHook(addrs[0], size, hookBytes, setHookData);
 }
-
-bool GameCheat::GC::moduleScan(vector<BYTE> bytes, size_t offset, size_t size, vector<BYTE> hookBytes, SetHook* SetHook)
+bool GameCheat::GC::moduleScan(vector<BYTE> bytes, size_t offset, size_t size, vector<BYTE> hookBytes, SetHook* setHookData)
 {
   vector<BYTE*> addrs = moduleScan(bytes, offset);
   if (addrs.size() == 0)
@@ -106,10 +105,9 @@ bool GameCheat::GC::moduleScan(vector<BYTE> bytes, size_t offset, size_t size, v
     printf("MosuleScan Error: 扫描失败，未找到字节集.\n");
     return false;
   }
-  return setHook(addrs[0], size, hookBytes, SetHook);
+  return setHook(addrs[0], size, hookBytes, setHookData);
 }
-
-bool GameCheat::GC::moduleScan(vector<BYTE> bytes, vector<BYTE> hookBytes, SetHook* SetHook, string mask)
+bool GameCheat::GC::moduleScan(vector<BYTE> bytes, vector<BYTE> hookBytes, SetHook* setHookData, string mask)
 {
   vector<BYTE*> addrs = moduleScan(bytes, mask);
   if (addrs.size() == 0)
@@ -117,10 +115,9 @@ bool GameCheat::GC::moduleScan(vector<BYTE> bytes, vector<BYTE> hookBytes, SetHo
     printf("MosuleScan Error: 扫描失败，未找到字节集.\n");
     return false;
   }
-  return setHook(addrs[0], bytes.size(), hookBytes, SetHook);
+  return setHook(addrs[0], bytes.size(), hookBytes, setHookData);
 }
-
-bool GameCheat::GC::moduleScan(vector<BYTE> bytes, vector<BYTE> hookBytes, SetHook* SetHook)
+bool GameCheat::GC::moduleScan(vector<BYTE> bytes, vector<BYTE> hookBytes, SetHook* setHookData)
 {
   vector<BYTE*> addrs = moduleScan(bytes);
   if (addrs.size() == 0)
@@ -128,27 +125,23 @@ bool GameCheat::GC::moduleScan(vector<BYTE> bytes, vector<BYTE> hookBytes, SetHo
     printf("MosuleScan Error: 扫描失败，未找到字节集.\n");
     return false;
   }
-  return setHook(addrs[0], bytes.size(), hookBytes, SetHook);
+  return setHook(addrs[0], bytes.size(), hookBytes, setHookData);
 }
-
-bool GameCheat::GC::moduleScan(string bytes, size_t offset, size_t size, vector<BYTE> hookBytes, SetHook* SetHook, string mask)
+bool GameCheat::GC::moduleScan(string bytes, size_t offset, size_t size, vector<BYTE> hookBytes, SetHook* setHookData, string mask)
 {
-  return moduleScan(byteStr2Bytes(bytes), offset, size, hookBytes, SetHook, mask);
+  return moduleScan(byteStr2Bytes(bytes), offset, size, hookBytes, setHookData, mask);
 }
-
-bool GameCheat::GC::moduleScan(string bytes, size_t offset, size_t size, vector<BYTE> hookBytes, SetHook* SetHook)
+bool GameCheat::GC::moduleScan(string bytes, size_t offset, size_t size, vector<BYTE> hookBytes, SetHook* setHookData)
 {
-  return moduleScan(byteStr2Bytes(bytes), offset, size, hookBytes, SetHook);
+  return moduleScan(byteStr2Bytes(bytes), offset, size, hookBytes, setHookData);
 }
-
-bool GameCheat::GC::moduleScan(string bytes, vector<BYTE> hookBytes, SetHook* SetHook, string mask)
+bool GameCheat::GC::moduleScan(string bytes, vector<BYTE> hookBytes, SetHook* setHookData, string mask)
 {
-  return moduleScan(byteStr2Bytes(bytes), hookBytes, SetHook, mask);
+  return moduleScan(byteStr2Bytes(bytes), hookBytes, setHookData, mask);
 }
-
-bool GameCheat::GC::moduleScan(string bytes, vector<BYTE> hookBytes, SetHook* SetHook)
+bool GameCheat::GC::moduleScan(string bytes, vector<BYTE> hookBytes, SetHook* setHookData)
 {
-  return moduleScan(byteStr2Bytes(bytes), hookBytes, SetHook);
+  return moduleScan(byteStr2Bytes(bytes), hookBytes, setHookData);
 }
 
 vector<BYTE*> GameCheat::GC::moduleScan(vector<BYTE> bytes)
@@ -167,7 +160,6 @@ vector<BYTE*> GameCheat::GC::moduleScan(vector<BYTE> bytes, string mask, size_t 
 {
   return _moduleScan(bytes, mask, offset);
 }
-
 vector<BYTE*> GameCheat::GC::moduleScan(string bytes)
 {
   return moduleScan(byteStr2Bytes(bytes));
@@ -185,8 +177,7 @@ vector<BYTE*> GameCheat::GC::moduleScan(string bytes, string mask, size_t offset
   return moduleScan(byteStr2Bytes(bytes), mask, offset);
 }
 
-
-bool GameCheat::GC::callHook(BYTE* addr, size_t size, BYTE* hook, SetHook* SetHook)
+bool GameCheat::GC::callHook(BYTE* addr, size_t size, BYTE* hook, SetHook* setHookData)
 {
   vector<BYTE> origenBytes = {};
   origenBytes.resize(size);
@@ -464,21 +455,19 @@ myHook:
   *(DWORD*)(newHook + position) = jmpReturnBytes;
   
   DWORD jmpHookBytes = newHook - addr - 5;
-  SetHook->origenBytes = origenBytes;
-  SetHook->addr = addr;
-  SetHook->size = size;
-  SetHook->hookAddr = hook;
-  SetHook->jmpHookBytes = jmpHookBytes;
+  setHookData->origenBytes = origenBytes;
+  setHookData->addr = addr;
+  setHookData->size = size;
+  setHookData->hookAddr = hook;
+  setHookData->jmpHookBytes = jmpHookBytes;
   return true;
 }
-
 
 void GameCheat::GC::openConsole(FILE** f)
 {
   AllocConsole();
   freopen_s(f, "CONOUT$", "w", stdout);
 }
-
 void GameCheat::GC::closeConsole(FILE* f)
 {
   fclose(f);
