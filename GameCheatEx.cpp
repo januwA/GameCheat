@@ -185,8 +185,9 @@ bool GameCheatEx::GC::callHook(BYTE* addr, size_t size, BYTE* hook, SetHook* set
 
   BYTE* newHook = (BYTE*)getVirtualAlloc(1024);
   if (!newHook) return false;
-  size_t position = 0;
 
+  // call myHook
+  BYTE* calllocalFun = GameCheatEx::GC::createCallLocalFunction(hProcess, (uintptr_t)hook);
 #ifdef _WIN64
   // 使用堆栈大小
   // 4*8=32=0x20
@@ -195,266 +196,118 @@ bool GameCheatEx::GC::callHook(BYTE* addr, size_t size, BYTE* hook, SetHook* set
   // 32+128+128=288=0x120
 
   /*
-global Start
-section .text
-  ; 1
-  sub rsp,0x120
-  mov [rsp+0x20],rax
-  mov [rsp+0x28],rbx
-  mov [rsp+0x30],rcx
-  mov [rsp+0x38],rdx
-  mov [rsp+0x40],rsi
-  mov [rsp+0x48],rdi
-  mov [rsp+0x50],rbp
-  mov [rsp+0x58],rsp
-  mov [rsp+0x60],r8
-  mov [rsp+0x68],r9
-  mov [rsp+0x70],r10
-  mov [rsp+0x78],r11
-  mov [rsp+0x80],r12
-  mov [rsp+0x88],r13
-  mov [rsp+0x90],r14
-  mov [rsp+0x98],r15
-  movq [rsp+0xA0],xmm0
-  movq [rsp+0xA8],xmm1
-  movq [rsp+0xB0],xmm2
-  movq [rsp+0xB8],xmm3
-  movq [rsp+0xC0],xmm4
-  movq [rsp+0xC8],xmm5
-  movq [rsp+0xD0],xmm6
-  movq [rsp+0xD8],xmm7
-  movq [rsp+0xE0],xmm8
-  movq [rsp+0xE8],xmm9
-  movq [rsp+0xF0],xmm10
-  movq [rsp+0xF8],xmm11
-  movq [rsp+0x100],xmm12
-  movq [rsp+0x108],xmm13
-  movq [rsp+0x110],xmm14
-  movq [rsp+0x118],xmm15
+    0000- 48 81 EC 20010000     - sub rsp,00000120
+    0007- 48 89 44 24 20        - mov [rsp+20],rax
+    000C- 48 89 5C 24 28        - mov [rsp+28],rbx
+    0011- 48 89 4C 24 30        - mov [rsp+30],rcx
+    0016- 48 89 54 24 38        - mov [rsp+38],rdx
+    001B- 48 89 74 24 40        - mov [rsp+40],rsi
+    0020- 48 89 7C 24 48        - mov [rsp+48],rdi
+    0025- 48 89 6C 24 50        - mov [rsp+50],rbp
+    002A- 48 89 64 24 58        - mov [rsp+58],rsp
+    002F- 4C 89 44 24 60        - mov [rsp+60],r8
+    0034- 4C 89 4C 24 68        - mov [rsp+68],r9
+    0039- 4C 89 54 24 70        - mov [rsp+70],r10
+    003E- 4C 89 5C 24 78        - mov [rsp+78],r11
+    0043- 4C 89 A4 24 80000000  - mov [rsp+00000080],r12
+    004B- 4C 89 AC 24 88000000  - mov [rsp+00000088],r13
+    0053- 4C 89 B4 24 90000000  - mov [rsp+00000090],r14
+    005B- 4C 89 BC 24 98000000  - mov [rsp+00000098],r15
+    0063- 66 0FD6 84 24 A0000000  - movq [rsp+000000A0],xmm0
+    006C- 66 0FD6 8C 24 A8000000  - movq [rsp+000000A8],xmm1
+    0075- 66 0FD6 94 24 B0000000  - movq [rsp+000000B0],xmm2
+    007E- 66 0FD6 9C 24 B8000000  - movq [rsp+000000B8],xmm3
+    0087- 66 0FD6 A4 24 C0000000  - movq [rsp+000000C0],xmm4
+    0090- 66 0FD6 AC 24 C8000000  - movq [rsp+000000C8],xmm5
+    0099- 66 0FD6 B4 24 D0000000  - movq [rsp+000000D0],xmm6
+    00A2- 66 0FD6 BC 24 D8000000  - movq [rsp+000000D8],xmm7
+    00AB- 66 44 0FD6 84 24 E0000000  - movq [rsp+000000E0],xmm8
+    00B5- 66 44 0FD6 8C 24 E8000000  - movq [rsp+000000E8],xmm9
+    00BF- 66 44 0FD6 94 24 F0000000  - movq [rsp+000000F0],xmm10
+    00C9- 66 44 0FD6 9C 24 F8000000  - movq [rsp+000000F8],xmm11
+    00D3- 66 44 0FD6 A4 24 00010000  - movq [rsp+00000100],xmm12
+    00DD- 66 44 0FD6 AC 24 08010000  - movq [rsp+00000108],xmm13
+    00E7- 66 44 0FD6 B4 24 10010000  - movq [rsp+00000110],xmm14
+    00F1- 66 44 0FD6 BC 24 18010000  - movq [rsp+00000118],xmm15
 
-  ; 2
-  lea rcx,[rsp+0x20]
-  mov rax,myHook
-  call rax
+    00FB- 48 8D 4C 24 20        - lea rcx,[rsp+20]
+    0100- 48 B8 A0A10675F87F0000 - mov rax,localFun { callLocalFun }
+    010A- FF D0                 - call rax
 
-  ; 3
-  mov rax,[rsp+0x20]
-  mov rbx,[rsp+0x28]
-  mov rcx,[rsp+0x30]
-  mov rdx,[rsp+0x38]
-  mov rsi,[rsp+0x40]
-  mov rdi,[rsp+0x48]
-  mov rbp,[rsp+0x50]
-  ; mov rsp,[rsp+0x58]
-  mov r8,[rsp+0x60]
-  mov r9,[rsp+0x68]
-  mov r10,[rsp+0x70]
-  mov r11,[rsp+0x78]
-  mov r12,[rsp+0x80]
-  mov r13,[rsp+0x88]
-  mov r14,[rsp+0x90]
-  mov r15,[rsp+0x98]
-  movq xmm0,[rsp+0xA0]
-  movq xmm1,[rsp+0xA8]
-  movq xmm2,[rsp+0xB0]
-  movq xmm3,[rsp+0xB8]
-  movq xmm4,[rsp+0xC0]
-  movq xmm5,[rsp+0xC8]
-  movq xmm6,[rsp+0xD0]
-  movq xmm7,[rsp+0xD8]
-  movq xmm8,[rsp+0xE0]
-  movq xmm9,[rsp+0xE8]
-  movq xmm10,[rsp+0xF0]
-  movq xmm11,[rsp+0xF8]
-  movq xmm12,[rsp+0x100]
-  movq xmm13,[rsp+0x108]
-  movq xmm14,[rsp+0x110]
-  movq xmm15,[rsp+0x118]
-  add rsp,0x120
-
-myHook:
+    010C- 48 8B 44 24 20        - mov rax,[rsp+20]
+    0111- 48 8B 5C 24 28        - mov rbx,[rsp+28]
+    0116- 48 8B 4C 24 30        - mov rcx,[rsp+30]
+    011B- 48 8B 54 24 38        - mov rdx,[rsp+38]
+    0120- 48 8B 74 24 40        - mov rsi,[rsp+40]
+    0125- 48 8B 7C 24 48        - mov rdi,[rsp+48]
+    012A- 48 8B 6C 24 50        - mov rbp,[rsp+50]
+    012F- 4C 8B 44 24 60        - mov r8,[rsp+60]
+    0134- 4C 8B 4C 24 68        - mov r9,[rsp+68]
+    0139- 4C 8B 54 24 70        - mov r10,[rsp+70]
+    013E- 4C 8B 5C 24 78        - mov r11,[rsp+78]
+    0143- 4C 8B A4 24 80000000  - mov r12,[rsp+00000080]
+    014B- 4C 8B AC 24 88000000  - mov r13,[rsp+00000088]
+    0153- 4C 8B B4 24 90000000  - mov r14,[rsp+00000090]
+    015B- 4C 8B BC 24 98000000  - mov r15,[rsp+00000098]
+    0163- F3 0F7E 84 24 A0000000  - movq xmm0,[rsp+000000A0]
+    016C- F3 0F7E 8C 24 A8000000  - movq xmm1,[rsp+000000A8]
+    0175- F3 0F7E 94 24 B0000000  - movq xmm2,[rsp+000000B0]
+    017E- F3 0F7E 9C 24 B8000000  - movq xmm3,[rsp+000000B8]
+    0187- F3 0F7E A4 24 C0000000  - movq xmm4,[rsp+000000C0]
+    0190- F3 0F7E AC 24 C8000000  - movq xmm5,[rsp+000000C8]
+    0199- F3 0F7E B4 24 D0000000  - movq xmm6,[rsp+000000D0]
+    01A2- F3 0F7E BC 24 D8000000  - movq xmm7,[rsp+000000D8]
+    01AB- F3 44 0F7E 84 24 E0000000  - movq xmm8,[rsp+000000E0]
+    01B5- F3 44 0F7E 8C 24 E8000000  - movq xmm9,[rsp+000000E8]
+    01BF- F3 44 0F7E 94 24 F0000000  - movq xmm10,[rsp+000000F0]
+    01C9- F3 44 0F7E 9C 24 F8000000  - movq xmm11,[rsp+000000F8]
+    01D3- F3 44 0F7E A4 24 00010000  - movq xmm12,[rsp+00000100]
+    01DD- F3 44 0F7E AC 24 08010000  - movq xmm13,[rsp+00000108]
+    01E7- F3 44 0F7E B4 24 10010000  - movq xmm14,[rsp+00000110]
+    01F1- F3 44 0F7E BC 24 18010000  - movq xmm15,[rsp+00000118]
+    01FB- 48 81 C4 20010000     - add rsp,00000120
   */
 
-  // 1
-  string bytesStr1 = "48 81 EC 20 01 00 00\n" // sub rsp,0x120
-    "48 89 44 24 20\n" // mov [rsp+0x20],rax
-    "48 89 5C 24 28\n" // mov [rsp+0x28],rbx
-    "48 89 4C 24 30\n" // mov [rsp+0x30],rcx
-    "48 89 54 24 38\n" // mov [rsp+0x38],rdx
-    "48 89 74 24 40\n" // mov [rsp+0x40],rsi
-    "48 89 7C 24 48\n" // mov [rsp+0x48],rdi
-    "48 89 6C 24 50\n" // mov [rsp+0x50],rbp
-    "48 89 64 24 58\n" // mov [rsp+0x58],rsp
-    "4C 89 44 24 60\n" // mov [rsp+0x60],r8
-    "4C 89 4C 24 68\n" // mov [rsp+0x68],r9
-    "4C 89 54 24 70\n" // mov [rsp+0x70],r10
-    "4C 89 5C 24 78\n" // mov [rsp+0x78],r11
-    "4C 89 A4 24 80 00 00 00\n" // mov [rsp+0x80],r12
-    "4C 89 AC 24 88 00 00 00\n" // mov [rsp+0x88],r13
-    "4C 89 B4 24 90 00 00 00\n" // mov [rsp+0x90],r14
-    "4C 89 BC 24 98 00 00 00\n" // mov [rsp+0x98],r15
-    "66 0F D6 84 24 A0 00 00 00\n" // movq [rsp+0xA0],xmm0
-    "66 0F D6 8C 24 A8 00 00 00\n" // movq [rsp+0xA8],xmm1
-    "66 0F D6 94 24 B0 00 00 00\n" // movq [rsp+0xB0],xmm2
-    "66 0F D6 9C 24 B8 00 00 00\n" // movq [rsp+0xB8],xmm3
-    "66 0F D6 A4 24 C0 00 00 00\n" // movq [rsp+0xC0],xmm4
-    "66 0F D6 AC 24 C8 00 00 00\n" // movq [rsp+0xC8],xmm5
-    "66 0F D6 B4 24 D0 00 00 00\n" // movq [rsp+0xD0],xmm6
-    "66 0F D6 BC 24 D8 00 00 00\n" // movq [rsp+0xD8],xmm7
-    "66 44 0F D6 84 24 E0 00 00\n" // movq [rsp+0xE0],xmm8
-    "00\n"
-    "66 44 0F D6 8C 24 E8 00 00\n" // movq [rsp+0xE8],xmm9
-    "00\n"
-    "66 44 0F D6 94 24 F0 00 00\n" // movq [rsp+0xF0],xmm10
-    "00\n"
-    "66 44 0F D6 9C 24 F8 00 00\n" // movq [rsp+0xF8],xmm11
-    "00\n"
-    "66 44 0F D6 A4 24 00 01 00\n" // movq [rsp+0x100],xmm12
-    "00\n"
-    "66 44 0F D6 AC 24 08 01 00\n" // movq [rsp+0x108],xmm13
-    "00\n"
-    "66 44 0F D6 B4 24 10 01 00\n" // movq [rsp+0x110],xmm14
-    "00\n"
-    "66 44 0F D6 BC 24 18 01 00\n" // movq [rsp+0x118],xmm15
-    "00\n"
+  vector<BYTE> bytecode = GameCheatEx::GC::byteStr2Bytes("48 81 EC 20 01 00 00 48 89 44 24 20 48 89 5C 24 28 48 89 4C 24 30 48 89 54 24 38 48 89 74 24 40 48 89 7C 24 48 48 89 6C 24 50 48 89 64 24 58 4C 89 44 24 60 4C 89 4C 24 68 4C 89 54 24 70 4C 89 5C 24 78 4C 89 A4 24 80 00 00 00 4C 89 AC 24 88 00 00 00 4C 89 B4 24 90 00 00 00 4C 89 BC 24 98 00 00 00 66 0F D6 84 24 A0 00 00 00 66 0F D6 8C 24 A8 00 00 00 66 0F D6 94 24 B0 00 00 00 66 0F D6 9C 24 B8 00 00 00 66 0F D6 A4 24 C0 00 00 00 66 0F D6 AC 24 C8 00 00 00 66 0F D6 B4 24 D0 00 00 00 66 0F D6 BC 24 D8 00 00 00 66 44 0F D6 84 24 E0 00 00 00 66 44 0F D6 8C 24 E8 00 00 00 66 44 0F D6 94 24 F0 00 00 00 66 44 0F D6 9C 24 F8 00 00 00 66 44 0F D6 A4 24 00 01 00 00 66 44 0F D6 AC 24 08 01 00 00 66 44 0F D6 B4 24 10 01 00 00 66 44 0F D6 BC 24 18 01 00 00 48 8D 4C 24 20 48 B8 A0 A1 06 75 F8 7F 00 00 FF D0 48 8B 44 24 20 48 8B 5C 24 28 48 8B 4C 24 30 48 8B 54 24 38 48 8B 74 24 40 48 8B 7C 24 48 48 8B 6C 24 50 4C 8B 44 24 60 4C 8B 4C 24 68 4C 8B 54 24 70 4C 8B 5C 24 78 4C 8B A4 24 80 00 00 00 4C 8B AC 24 88 00 00 00 4C 8B B4 24 90 00 00 00 4C 8B BC 24 98 00 00 00 F3 0F 7E 84 24 A0 00 00 00 F3 0F 7E 8C 24 A8 00 00 00 F3 0F 7E 94 24 B0 00 00 00 F3 0F 7E 9C 24 B8 00 00 00 F3 0F 7E A4 24 C0 00 00 00 F3 0F 7E AC 24 C8 00 00 00 F3 0F 7E B4 24 D0 00 00 00 F3 0F 7E BC 24 D8 00 00 00 F3 44 0F 7E 84 24 E0 00 00 00 F3 44 0F 7E 8C 24 E8 00 00 00 F3 44 0F 7E 94 24 F0 00 00 00 F3 44 0F 7E 9C 24 F8 00 00 00 F3 44 0F 7E A4 24 00 01 00 00 F3 44 0F 7E AC 24 08 01 00 00 F3 44 0F 7E B4 24 10 01 00 00 F3 44 0F 7E BC 24 18 01 00 00 48 81 C4 20 01 00 00");
 
-    // 2
-    "48 8D 4C 24 20\n" // lea rcx,[rsp+0x20]
-    "48 B8"; // mov rax,
-
-  vector<BYTE> bytes1 = GameCheatEx::GC::byteStr2Bytes(bytesStr1);
-  memcpy_s(newHook + position, bytes1.size(), bytes1.data(), bytes1.size());
-  position += bytes1.size();
-
-  *(uintptr_t*)(newHook + position) = (uintptr_t)hook; // myHook
-  position += sizeof(uintptr_t);
-
-  // 3
-  string bytesStr2 = "FF D0\n" // call rax
-    "48 8B 44 24 20\n" // mov rax,[rsp+0x20]
-    "48 8B 5C 24 28\n" // mov rbx,[rsp+0x28]
-    "48 8B 4C 24 30\n" // mov rcx,[rsp+0x30]
-    "48 8B 54 24 38\n" // mov rdx,[rsp+0x38]
-    "48 8B 74 24 40\n" // mov rsi,[rsp+0x40]
-    "48 8B 7C 24 48\n" // mov rdi,[rsp+0x48]
-    "48 8B 6C 24 50\n" // mov rbp,[rsp+0x50]
-    // "48 8B 64 24 58\n" // mov rsp,[rsp+0x58]
-    "4C 8B 44 24 60\n" // mov r8,[rsp+0x60]
-    "4C 8B 4C 24 68\n" // mov r9,[rsp+0x68]
-    "4C 8B 54 24 70\n" // mov r10,[rsp+0x70]
-    "4C 8B 5C 24 78\n" // mov r11,[rsp+0x78]
-    "4C 8B A4 24 80 00 00 00\n" // mov r12,[rsp+0x80]
-    "4C 8B AC 24 88 00 00 00\n" // mov r13,[rsp+0x88]
-    "4C 8B B4 24 90 00 00 00\n" // mov r14,[rsp+0x90]
-    "4C 8B BC 24 98 00 00 00\n" // mov r15,[rsp+0x98]
-    "F3 0F 7E 84 24 A0 00 00 00\n" // movq xmm0,[rsp+0xA0]
-    "F3 0F 7E 8C 24 A8 00 00 00\n" // movq xmm1,[rsp+0xA8]
-    "F3 0F 7E 94 24 B0 00 00 00\n" // movq xmm2,[rsp+0xB0]
-    "F3 0F 7E 9C 24 B8 00 00 00\n" // movq xmm3,[rsp+0xB8]
-    "F3 0F 7E A4 24 C0 00 00 00\n" // movq xmm4,[rsp+0xC0]
-    "F3 0F 7E AC 24 C8 00 00 00\n" // movq xmm5,[rsp+0xC8]
-    "F3 0F 7E B4 24 D0 00 00 00\n" // movq xmm6,[rsp+0xD0]
-    "F3 0F 7E BC 24 D8 00 00 00\n" // movq xmm7,[rsp+0xD8]
-    "F3 44 0F 7E 84 24 E0 00 00\n" // movq xmm8,[rsp+0xE0]
-    "00\n"
-    "F3 44 0F 7E 8C 24 E8 00 00\n" // movq xmm9,[rsp+0xE8]
-    "00\n"
-    "F3 44 0F 7E 94 24 F0 00 00\n" // movq xmm10,[rsp+0xF0]
-    "00\n"
-    "F3 44 0F 7E 9C 24 F8 00 00\n" // movq xmm11,[rsp+0xF8]
-    "00\n"
-    "F3 44 0F 7E A4 24 00 01 00\n" // movq xmm12,[rsp+0x100]
-    "00\n"
-    "F3 44 0F 7E AC 24 08 01 00\n" // movq xmm13,[rsp+0x108]
-    "00\n"
-    "F3 44 0F 7E B4 24 10 01 00\n" // movq xmm14,[rsp+0x110]
-    "00\n"
-    "F3 44 0F 7E BC 24 18 01 00\n" // movq xmm15,[rsp+0x118]
-    "00\n"
-
-    "48 81 C4 20 01 00 00"; // add rsp,0x120
-  vector<BYTE> bytes2 = GameCheatEx::GC::byteStr2Bytes(bytesStr2);
-  memcpy_s(newHook + position, bytes2.size(), bytes2.data(), bytes2.size());
-  position += bytes2.size();
+  *(uintptr_t*)(bytecode.data() + 0x102) = (uintptr_t)calllocalFun;
 
 #else
-
   /*
-global Start
-section .text
-  ; 1
-  push esp
-  push ebp
-  push edi
-  push esi
-  push edx
-  push ecx
-  push ebx
-  push eax
-
-  ; 2
-  push esp
-  call myHook
-
-  ; 3
-  pop eax
-  pop ebx
-  pop ecx
-  pop edx
-  pop esi
-  pop edi
-  pop ebp
-  add esp,0x04
-
-myHook:
-
+    000- 54                    - push esp
+    001- 55                    - push ebp
+    002- 57                    - push edi
+    003- 56                    - push esi
+    004- 52                    - push edx
+    005- 51                    - push ecx
+    006- 53                    - push ebx
+    007- 50                    - push eax
+    008- 54                    - push esp
+    009- B8 78563412           - mov eax,12345678 { callLocalFun }
+    00E- FF D0                 - call eax
+    010- 58                    - pop eax
+    011- 5B                    - pop ebx
+    012- 59                    - pop ecx
+    013- 5A                    - pop edx
+    014- 5E                    - pop esi
+    015- 5F                    - pop edi
+    016- 5D                    - pop ebp
+    017- 83 C4 04              - add esp,04
+    // return
 */
+  vector<BYTE> bytecode = GameCheatEx::GC::byteStr2Bytes("54 55 57 56 52 51 53 50 54 B8 78 56 34 12 FF D0 58 5B 59 5A 5E 5F 5D 83 C4 04");
 
-// 1
-  string bytesStr1 = "54\n" // push esp
-    "55\n" // push ebp
-    "57\n" // push edi
-    "56\n" // push esi
-    "52\n" // push edx
-    "51\n" // push ecx
-    "53\n" // push ebx
-    "50\n" // push eax
-    "54";  // push esp
-
-  vector<BYTE> bytes1 = byteStr2Bytes(bytesStr1);
-  WriteProcessMemory(hProcess, newHook + position, bytes1.data(), bytes1.size(), 0);
-  position += bytes1.size();
-
-  // call myHook
-  DWORD callMyHookBytes = (BYTE*)hook - (newHook + position) - 5;
-  *(newHook + position) = 0xE8;
-  position += sizeof(BYTE);
-  *(DWORD*)(newHook + position) = callMyHookBytes;
-  position += sizeof(DWORD);
-
-  // 3
-  string bytesStr2 = "58\n" // pop eax
-    "5B\n" // pop ebx
-    "59\n" // pop ecx
-    "5A\n" // pop edx
-    "5E\n" // pop esi
-    "5F\n" // pop edi
-    "5D\n" // pop ebp
-    "83 C4 04"; // add esp,0x04
-
-  vector<BYTE> bytes2 = byteStr2Bytes(bytesStr2);
-  memcpy_s(newHook + position, bytes2.size(), bytes2.data(), bytes2.size());
-  position += bytes2.size();
-
+  *(DWORD*)(bytecode.data() + 0x0A) = (DWORD)calllocalFun;
 #endif // _win64
-
-  // return
-  DWORD jmpReturnBytes = (addr + size) - (newHook + position) - 5;
-  *(newHook + position) = 0xE9;
-  position += sizeof(BYTE);
-  *(DWORD*)(newHook + position) = jmpReturnBytes;
   
+  WriteProcessMemory(hProcess, newHook, bytecode.data(), bytecode.size(), 0);
+  
+  DWORD jmpReturnBytes = (addr + size) - (newHook + bytecode.size()) - 5;
+  WriteProcessMemory(hProcess, (LPVOID)(newHook + bytecode.size()), (LPCVOID)&JMP_BYTE, sizeof(BYTE), 0);
+  WriteProcessMemory(hProcess, (LPVOID)(newHook + bytecode.size() + 1), (LPCVOID)&jmpReturnBytes, sizeof(DWORD), 0);
+
   DWORD jmpHookBytes = newHook - addr - 5;
+  setHookData->hProcess = hProcess;
   setHookData->origenBytes = origenBytes;
   setHookData->addr = addr;
   setHookData->size = size;
@@ -492,6 +345,11 @@ LPVOID GameCheatEx::GC::getVirtualAlloc(size_t size)
     newmems.push_back((BYTE*)newmem);
 
   return newmem;
+}
+
+uintptr_t GameCheatEx::GC::toVA(uintptr_t rva)
+{
+  return (uintptr_t)mi.lpBaseOfDll + rva;
 }
 
 vector<BYTE*> GameCheatEx::GC::_moduleScan(vector<BYTE> bytes, string mask, size_t offset)
@@ -553,12 +411,13 @@ vector<BYTE*> GameCheatEx::GC::_moduleScan(vector<BYTE> bytes, string mask, size
      printf("[NoSuccess] %s\n", msg.c_str());
      return;
    }
-
+  
    DWORD oldProc;
    VirtualProtectEx(hProcess, addr, size, PAGE_EXECUTE_READWRITE, &oldProc);
    GameCheatEx::GC::memsetEx(hProcess, addr, 0x90, size);
    this->enableHook();
    VirtualProtectEx(hProcess, addr, size, oldProc, 0);
+
    if (!msg.empty())
      printf("[enable]  %s\n", msg.c_str());
  }
@@ -584,10 +443,4 @@ vector<BYTE*> GameCheatEx::GC::_moduleScan(vector<BYTE> bytes, string mask, size
    bEnable = !bEnable;
    if (bEnable) enable();
    else disable();
- }
-
- void GameCheatEx::SetHook::enableHook()
- {
-   WriteProcessMemory(hProcess, (LPVOID)addr, (LPCVOID)&JMP_BYTE, sizeof(BYTE), 0);
-   WriteProcessMemory(hProcess, (LPVOID)(addr + 1), (LPCVOID)&jmpHookBytes, sizeof(DWORD), 0);
  }

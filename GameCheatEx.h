@@ -9,6 +9,7 @@
 
 const BYTE JMP_BYTE = 0xE9;
 const BYTE CALL_BYTE = 0xE9;
+const BYTE NOP_BYTE = 0x90;
 
 using namespace std;
 
@@ -41,10 +42,8 @@ namespace GameCheatEx
     void enable();
     void disable();
     void toggle();
-    void enableHook()
-    {
-
-    }
+    virtual void enableHook() {
+    };
   };
 
   class SetNop : public HookBase
@@ -58,7 +57,11 @@ namespace GameCheatEx
     // hook 函数/bytes 地址
     BYTE* hookAddr;
     DWORD jmpHookBytes;
-    void enableHook();
+    void enableHook()
+    {
+     WriteProcessMemory(hProcess, (LPVOID)addr, (LPCVOID)&JMP_BYTE, sizeof(BYTE), 0);
+     WriteProcessMemory(hProcess, (LPVOID)(addr + 1), (LPCVOID)&jmpHookBytes, sizeof(DWORD), 0);
+    }
   };
 
   struct Regs
@@ -224,6 +227,192 @@ namespace GameCheatEx
   class GC
   {
   public:
+
+    static GameCheatEx::Regs getRegs(uintptr_t lpRegs)
+    {
+      GameCheatEx::Regs regs;
+#ifdef _WIN64
+      regs.rax = (lpRegs + sizeof(uintptr_t) * 0);
+      regs.rbx = (lpRegs + sizeof(uintptr_t) * 1);
+      regs.rcx = (lpRegs + sizeof(uintptr_t) * 2);
+      regs.rdx = (lpRegs + sizeof(uintptr_t) * 3);
+      regs.rsi = (lpRegs + sizeof(uintptr_t) * 4);
+      regs.rdi = (lpRegs + sizeof(uintptr_t) * 5);
+      regs.rbp = (lpRegs + sizeof(uintptr_t) * 6);
+      regs.rsp = (lpRegs + sizeof(uintptr_t) * 7);
+      regs.r8 = (lpRegs + sizeof(uintptr_t) * 8);
+      regs.r9 = (lpRegs + sizeof(uintptr_t) * 9);
+      regs.r10 = (lpRegs + sizeof(uintptr_t) * 10);
+      regs.r11 = (lpRegs + sizeof(uintptr_t) * 11);
+      regs.r12 = (lpRegs + sizeof(uintptr_t) * 12);
+      regs.r13 = (lpRegs + sizeof(uintptr_t) * 13);
+      regs.r14 = (lpRegs + sizeof(uintptr_t) * 14);
+      regs.r15 = (lpRegs + sizeof(uintptr_t) * 15);
+      regs.xmm0 = (lpRegs + sizeof(uintptr_t) * 16);
+      regs.xmm1 = (lpRegs + sizeof(uintptr_t) * 17);
+      regs.xmm2 = (lpRegs + sizeof(uintptr_t) * 18);
+      regs.xmm3 = (lpRegs + sizeof(uintptr_t) * 19);
+      regs.xmm4 = (lpRegs + sizeof(uintptr_t) * 20);
+      regs.xmm5 = (lpRegs + sizeof(uintptr_t) * 21);
+      regs.xmm6 = (lpRegs + sizeof(uintptr_t) * 22);
+      regs.xmm7 = (lpRegs + sizeof(uintptr_t) * 23);
+      regs.xmm8 = (lpRegs + sizeof(uintptr_t) * 24);
+      regs.xmm9 = (lpRegs + sizeof(uintptr_t) * 25);
+      regs.xmm10 = (lpRegs + sizeof(uintptr_t) * 26);
+      regs.xmm11 = (lpRegs + sizeof(uintptr_t) * 27);
+      regs.xmm12 = (lpRegs + sizeof(uintptr_t) * 28);
+      regs.xmm13 = (lpRegs + sizeof(uintptr_t) * 29);
+      regs.xmm14 = (lpRegs + sizeof(uintptr_t) * 30);
+      regs.xmm15 = (lpRegs + sizeof(uintptr_t) * 31);
+#else
+      regs.eax = (lpRegs + sizeof(uintptr_t) * 0);
+      regs.ebx = (lpRegs + sizeof(uintptr_t) * 1);
+      regs.ecx = (lpRegs + sizeof(uintptr_t) * 2);
+      regs.edx = (lpRegs + sizeof(uintptr_t) * 3);
+      regs.esi = (lpRegs + sizeof(uintptr_t) * 4);
+      regs.edi = (lpRegs + sizeof(uintptr_t) * 5);
+      regs.ebp = (lpRegs + sizeof(uintptr_t) * 6);
+      regs.esp = (lpRegs + sizeof(uintptr_t) * 7);
+#endif // _WIN64
+      return regs;
+    }
+
+    /* 
+     ## 在目标进程创建一个函数，调用本地函数
+
+     return func address
+    */
+    static BYTE* createCallLocalFunction(HANDLE hProcess, uintptr_t lplocalFun)
+    {
+      uintptr_t pCreateRemoteThread = GameCheatEx::GC::GetProcAddressEx(hProcess, "kernel32.dll", "CreateRemoteThread");
+      uintptr_t pOpenProcess = GameCheatEx::GC::GetProcAddressEx(hProcess, "kernel32.dll", "OpenProcess");
+      uintptr_t pCloseHandle = GameCheatEx::GC::GetProcAddressEx(hProcess, "kernel32.dll", "CloseHandle");
+      uintptr_t pWaitForSingleObject = GameCheatEx::GC::GetProcAddressEx(hProcess, "kernel32.dll", "WaitForSingleObject");
+
+#ifdef _WIN64
+      /*
+    0000- 55                    - push rbp
+    0001- 48 8B EC              - mov rbp,rsp
+    0004- 48 83 EC 18           - sub rsp,18
+    0008- 48 89 4D F8           - mov [rbp-08],rcx // save regs param
+    
+    // get local hProcess
+    000C- 48 83 EC 20           - sub rsp,20
+    0010- 48 B8 A0A10675F87F0000 - mov rax,KERNEL32.OpenProcess
+    001A- 48 B9 FFFF1F0000000000 - mov rcx,00000000001FFFFF // PROCESS_ALL_ACCESS
+    0024- 48 31 D2              - xor rdx,rdx
+    0027- 49 B8 DC48000000000000 - mov r8,00000000000048DC // lcoal pid
+    0031- FF D0                 - call rax
+    0033- 48 89 45 F0           - mov [rbp-10],rax // save local hProcess
+    0037- 48 83 C4 20           - add rsp,20
+    
+    // call CreateRemoteThread
+    003B- 48 83 EC 38           - sub rsp,38
+    003F- 48 8B C8              - mov rcx,rax
+    0042- 48 31 D2              - xor rdx,rdx
+    0045- 4D 31 C0              - xor r8,r8
+    0048- 49 B9 80102E86F67F0000 - mov r9,00007FF6862E1080 // lpLocalFun
+    0052- 48 8B 45 F8           - mov rax,[rbp-08]
+    0056- 48 89 44 24 20        - mov [rsp+20],rax // lpParam
+    005B- C7 44 24 28 00000000  - mov [rsp+28],00000000
+    0063- C7 44 24 30 00000000  - mov [rsp+30],00000000
+    006B- 48 B8 70590875F87F0000 - mov rax,KERNEL32.CreateRemoteThread
+    0075- FF D0                 - call rax
+    0077- 48 89 45 E8           - mov [rbp-18],rax // save pThread
+    007B- 48 83 C4 38           - add rsp,38
+
+    // call WaitForSingleObject
+    007F- 48 83 EC 20           - sub rsp,20
+    0083- 48 B8 00200775F87F0000 - mov rax,KERNEL32.WaitForSingleObject
+    008D- 48 8B 4D E8           - mov rcx,[rbp-18]
+    0091- 48 BA FFFFFFFF00000000 - mov rdx,00000000FFFFFFFF // INFINITE
+    009B- FF D0                 - call rax
+    009D- 48 83 C4 20           - add rsp,20
+
+    // close hThread and hProcess
+    00A1- 48 83 EC 20           - sub rsp,20
+    00A5- 49 BC 101E0775F87F0000 - mov r12,KERNEL32.CloseHandle
+    00AF- 48 8B 4D E8           - mov rcx,[rbp-18]
+    00B3- 41 FF D4              - call r12
+    00B6- 48 8B 4D F0           - mov rcx,[rbp-10]
+    00BA- 41 FF D4              - call r12
+    00BD- 48 83 C4 20           - add rsp,20
+    
+    // end
+    00C1- 48 83 C4 18           - add rsp,18
+    00C5- 48 8B E5              - mov rsp,rbp
+    00C8- 5D                    - pop rbp
+    00C9- C3                    - ret
+      */
+      vector<BYTE> funcode = GameCheatEx::GC::byteStr2Bytes("55 48 8B EC 48 83 EC 18 48 89 4D F8 48 83 EC 20 48 B8 A0 A1 06 75 F8 7F 00 00 48 B9 FF FF 1F 00 00 00 00 00 48 31 D2 49 B8 DC 48 00 00 00 00 00 00 FF D0 48 89 45 F0 48 83 C4 20 48 83 EC 38 48 8B C8 48 31 D2 4D 31 C0 49 B9 80 10 2E 86 F6 7F 00 00 48 8B 45 F8 48 89 44 24 20 C7 44 24 28 00 00 00 00 C7 44 24 30 00 00 00 00 48 B8 70 59 08 75 F8 7F 00 00 FF D0 48 89 45 E8 48 83 C4 38 48 83 EC 20 48 B8 00 20 07 75 F8 7F 00 00 48 8B 4D E8 48 BA FF FF FF FF 00 00 00 00 FF D0 48 83 C4 20 48 83 EC 20 49 BC 10 1E 07 75 F8 7F 00 00 48 8B 4D E8 41 FF D4 48 8B 4D F0 41 FF D4 48 83 C4 20 48 83 C4 18 48 8B E5 5D C3");
+
+      *(uintptr_t*)(funcode.data() + 0x12) = (uintptr_t)pOpenProcess; // OpenProcess
+      *(uintptr_t*)(funcode.data() + 0x29) = (uintptr_t)GetCurrentProcessId(); // local pid
+      *(uintptr_t*)(funcode.data() + 0x4A) = lplocalFun; // lpLocalFun
+      *(uintptr_t*)(funcode.data() + 0x6D) = (uintptr_t)pCreateRemoteThread; // CreateRemoteThread
+      *(uintptr_t*)(funcode.data() + 0x85) = (uintptr_t)pWaitForSingleObject; // WaitForSingleObject
+      *(uintptr_t*)(funcode.data() + 0xA7) = (uintptr_t)pCloseHandle; // CloseHandle
+
+#else
+      /*
+      0000- 55                    - push ebp
+      0001- 8B EC                 - mov ebp,esp
+      0003- 83 EC 08              - sub esp,08
+
+      // get local hProcess
+      0006- 68 7C230000           - push 0000237C { local pid }
+      000B- 6A 00                 - push 00
+      000D- 68 FFFF1F00           - push 001FFFFF { PROCESS_ALL_ACCESS  }
+      0012- B8 0089C776           - mov eax,KERNEL32.OpenProcess
+      0017- FF D0                 - call eax
+      0019- 89 45 FC              - mov [ebp-04],eax
+
+      // call CreateRemoteThread
+      001C- 6A 00                 - push 00
+      001E- 6A 00                 - push 00
+      0020- FF 75 08              - push [ebp+08] { localfun param }
+      0023- 68 50102100           - push 00211050 { local funAddr }
+      0028- 6A 00                 - push 00
+      002A- 6A 00                 - push 00
+      002C- FF 75 FC              - push [ebp-04]
+      002F- B8 0041C976           - mov eax,KERNEL32.CreateRemoteThread
+      0034- FF D0                 - call eax
+      0036- 89 45 F8              - mov [ebp-08],eax
+
+      // call WaitForSingleObject
+      0039- B8 403EC876           - mov eax,KERNEL32.WaitForSingleObject
+      003E- 68 FFFFFFFF           - push FFFFFFFF { INFINITE }
+      0043- FF 75 F8              - push [ebp-08]
+      0046- FF D0                 - call eax
+
+      // close hThread and hProcess
+      0048- BB 503CC876           - mov ebx,KERNEL32.CloseHandle
+      004D- FF 75 F8              - push [ebp-08]
+      0050- FF D3                 - call ebx
+      0052- FF 75 FC              - push [ebp-04]
+      0055- FF D3                 - call ebx
+
+      0057- 83 C4 08              - add esp,08
+      005A- 8B E5                 - mov esp,ebp
+      005C- 5D                    - pop ebp
+      005D- C2 0400               - ret 0004
+      */
+
+      vector<BYTE> funcode = GameCheatEx::GC::byteStr2Bytes("55 8B EC 83 EC 08 68 7C 23 00 00 6A 00 68 FF FF 1F 00 B8 00 89 C7 76 FF D0 89 45 FC 6A 00 6A 00 FF 75 08 68 50 10 21 00 6A 00 6A 00 FF 75 FC B8 00 41 C9 76 FF D0 89 45 F8 B8 40 3E C8 76 68 FF FF FF FF FF 75 F8 FF D0 BB 50 3C C8 76 FF 75 F8 FF D3 FF 75 FC FF D3 83 C4 08 8B E5 5D C2 04 00");
+
+      *(DWORD*)(funcode.data() + 0x07) = (DWORD)GetCurrentProcessId(); // local pid
+      *(DWORD*)(funcode.data() + 0x13) = (DWORD)pOpenProcess; // OpenProcess
+      *(DWORD*)(funcode.data() + 0x24) = lplocalFun; // lpLocalFun
+      *(DWORD*)(funcode.data() + 0x30) = (DWORD)pCreateRemoteThread; // CreateRemoteThread
+      *(DWORD*)(funcode.data() + 0x3A) = (DWORD)pWaitForSingleObject; // WaitForSingleObject
+      *(DWORD*)(funcode.data() + 0x49) = (DWORD)pCloseHandle; // CloseHandle
+#endif // _WIN64
+
+      BYTE* newmem = (BYTE*)VirtualAllocEx(hProcess, 0, funcode.size(), MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+      WriteProcessMemory(hProcess, newmem, funcode.data(), funcode.size(), 0);
+      return newmem;
+    }
+
     static uintptr_t GetProcAddressEx(HANDLE hProcess, string modName, string exportFunName)
     {
       MODULEINFO mi = GameCheatEx::GC::GetModuleBase(modName, GetProcessId(hProcess));
@@ -324,12 +513,11 @@ namespace GameCheatEx
     }
 
 
-    static BYTE* memsetEx(HANDLE hProcess, BYTE* targetAddr, int val, size_t size)
+    static BYTE* memsetEx(HANDLE hProcess, BYTE* targetAddr, BYTE val, size_t size)
     {
       for (size_t i = 0; i < size; i++)
       {
-        targetAddr += i;
-        WriteProcessMemory(hProcess, targetAddr, &val, sizeof(BYTE), 0);
+        WriteProcessMemory(hProcess, targetAddr + i, &val, sizeof(BYTE), 0);
       }
       return targetAddr;
     }
@@ -619,32 +807,38 @@ namespace GameCheatEx
     vector<BYTE*> moduleScan(string bytes, string mask, size_t offset);
 
     /*
-    * # 使用这个函数挂钩Hook函数, 函数可以获取寄存器列表
+    # 使用这个函数挂钩Hook函数, 函数可以获取 寄存器指针 列表
 
-    * ```c++
-    void __stdcall myHook(GameCheat::Regs* regs)
+    ## x86:
+    ```c++
+    GameCheatEx::GC gc{ "Tutorial-i386.exe" };
+
+    void __stdcall hello(uintptr_t lpRegs)
     {
-    #ifdef _WIN64
-      printf("rax: %x\n", regs->rax);
-      printf("rbx: %x\n", regs->rbx);
-      printf("rcx: %x\n", regs->rcx);
-      printf("rdx: %x\n", regs->rdx);
-      printf("xmm0: %f\n", regs->xmm0);
-      *&regs->eax = 100;
-      *(DWORD*)(regs->rbx + 0x7F0) = *&regs->eax;
-
-    #else
-      printf("eax: %x\n", regs->eax);
-      printf("ebx: %x\n", regs->ebx);
-      printf("ecx: %x\n", regs->ecx);
-      printf("edx: %x\n", regs->edx);
-      *&regs->eax = 0;
-    #endif // _WIN64
+      GameCheatEx::Regs regs = GameCheatEx::GC::getRegs(lpRegs);
+      gc.setValue<DWORD>({ regs.ebx, 0x00, 0x4AC }, 100);
     }
 
-    GameCheat::SetHookStruct setHookStruct;
-    bool bSuccess = gc.callHook((BYTE*)gc.mi.lpBaseOfDll + 0x2B08C, 6, (BYTE*)&myHook, &setHookStruct);
-    if (bSuccess) setHookStruct.toggle();
+    // Tutorial-i386.exe+2578F - 29 83 AC040000        - sub [ebx+000004AC],eax
+    GameCheatEx::SetHook sk;
+    BYTE* addr = (BYTE*)gc.toVA(0x2578F);
+    sk.bSuccess = gc.callHook(addr, 6, (BYTE*)&hello, &sk);
+    ```
+
+    ## x64:
+    ```c++
+    GameCheatEx::GC gc{ "Tutorial-x86_64.exe" };
+
+    void __stdcall hello(uintptr_t lpRegs)
+    {
+      GameCheatEx::Regs regs = GameCheatEx::GC::getRegs(lpRegs);
+      gc.setValue<DWORD>({ regs.rbx, 0x00, 0x7F0 }, 100);
+    }
+
+    // Tutorial-x86_64.exe+2B08C - 29 83 F0070000      - sub [rbx+000007F0],eax
+    GameCheatEx::SetHook sk;
+    BYTE* addr = (BYTE*)gc.toVA(0x2B08C);
+    sk.bSuccess = gc.callHook(addr, 6, (BYTE*)&hello, &sk);
     ```
     */
     bool callHook(BYTE* addr, size_t size, BYTE* hook, SetHook* setHookStruct);
@@ -672,6 +866,8 @@ namespace GameCheatEx
     # 申请虚拟内存，务必调用这个函数
     */
     LPVOID getVirtualAlloc(size_t size);
+
+    uintptr_t toVA(uintptr_t rva);
   private:
     /* 在x64如果指针不在2-4GB则无法跳转 */
     BYTE* registerHookAddrBase = 0;
@@ -685,7 +881,7 @@ namespace GameCheatEx
   template<class T>
   inline void GC::setValue(vector<uintptr_t> offsets, T newValue)
   {
-    LPVOID pv = getAddress<T>(offsets);
+    LPVOID pv = (LPVOID)getAddress(offsets);
     WriteProcessMemory(hProcess, pv, (LPCVOID)&newValue, sizeof(T), 0);
   }
 
@@ -698,7 +894,7 @@ namespace GameCheatEx
   template<class T>
   inline T GC::getValue(vector<uintptr_t> offsets)
   {
-    LPVOID pv = getAddress<T>(offsets);
+    LPVOID pv = getAddress(offsets);
     T val;
     ReadProcessMemory(hProcess, pv, (LPCVOID)&val, sizeof(T), 0);
     return val;
