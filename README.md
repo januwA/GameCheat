@@ -1,4 +1,7 @@
-## GameCheat::GC 内部作弊常用的函数
+## GameCheat::GC   内部作弊常用的函数
+## GameCheatEx::GC 外部作弊常用的函数
+
+*GameCheat和GameCheatEx部分函数的实现不太一样，但尽可能保证相同API名*
 
 ```c++
 #include "pch.h"
@@ -18,8 +21,7 @@ DWORD WINAPI MyThread(HMODULE hModule)
     0x81, 0xC6, 0xE8, 0x03, 0x00, 0x00, // add esi,000003E8
     0x89, 0xB7, 0x78, 0x55, 0x00, 0x00 // mov [edi+00005578],esi
   };
-  GameCheat::SetHook SetHook;
-  bool pSuccess = gc.moduleScan("89 B7 78 55 00 00", codes, &SetHook);
+  GameCheat::SetHook SetHook = gc.moduleScan("89 B7 78 55 00 00", codes);
   while (!GetAsyncKeyState(VK_END))
   {
     if (GetAsyncKeyState(VK_F4) & 1)
@@ -102,7 +104,7 @@ dealloc(bMs)
 // ---------- DONE INJECTING  ----------
 ```
 
-## c++
+## 使用C++钩住函数并传递寄存器表
 ```c++
 #include "pch.h"
 #include <iostream>
@@ -149,7 +151,7 @@ int WINAPI Mythread(HMODULE hModule)
   playerAndEnemyHP.bSuccess = !addrs.empty(); // 是否扫描到字节
 
   if (playerAndEnemyHP.bSuccess)
-    playerAndEnemyHP.bSuccess = gc.callHook(addrs[0], 6, (BYTE*)&playerAndEnemyHP_h, &playerAndEnemyHP); // 是否挂钩成功 addrs[0] == "sekiro.exe"+BBF3BE
+    playerAndEnemyHP = gc.callHook(addrs[0], 6, (BYTE*)&playerAndEnemyHP_h); // 是否挂钩成功 addrs[0] == "sekiro.exe"+BBF3BE
 
   while (!GetAsyncKeyState(VK_END))
   {
@@ -202,8 +204,7 @@ int WINAPI Mythread(HMODULE hModule)
   
   BYTE* addr = (BYTE*)gc.mi.lpBaseOfDll + 0x2B08C;
 
-  GameCheat::SetNop setNop;
-  setNop.bSuccess = gc.setNop(addr, 6, &setNop); // OR: gc.setNopRVA(0x2B08C, 6, &setNop);
+  GameCheat::SetNop setNop = gc.setNop(addr, 6); // OR: gc.setNopRVA(0x2B08C, 6, &setNop);
 
   while (!GetAsyncKeyState(VK_END))
   {

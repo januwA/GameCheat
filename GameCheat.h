@@ -72,7 +72,7 @@ namespace GameCheat
       else disable();
     }
 
-    void enableHook()
+    virtual void enableHook()
     {
 
     }
@@ -261,79 +261,17 @@ namespace GameCheat
   public:
 
     /* string to wstring */
-    static wstring toWstring(string str)
-    {
-      return wstring(str.begin(), str.end());
-    }
+    static wstring toWstring(string str);
 
     /* 获取processID */
-    static DWORD GetPID(string gameName)
-    {
-      DWORD pid = 0;
-      HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-      if (hSnap != INVALID_HANDLE_VALUE)
-      {
-        PROCESSENTRY32 pe;
-        pe.dwSize = sizeof(pe);
-        if (Process32First(hSnap, &pe))
-        {
-          do
-          {
-            if (!_wcsicmp(pe.szExeFile, toWstring(gameName).c_str()))
-            {
-              pid = pe.th32ProcessID;
-              break;
-            }
-          } while (Process32Next(hSnap, &pe));
-        }
-      }
+    static DWORD GetPID(string gameName);
 
-      CloseHandle(hSnap);
-      return pid;
-    }
+    static MODULEINFO GetModuleInfo(string moduleName, HANDLE hProcess);
 
-    static MODULEINFO GetModuleInfo(string moduleName, HANDLE hProcess)
-    {
-      MODULEINFO mi{ 0 };
-      HMODULE hModule = GetModuleHandleW(toWstring(moduleName).c_str());
-      if (hModule == 0) return mi;
-      // 在MODULEINFO结构中检索有关指定模块的信息
-      GetModuleInformation(hProcess, hModule, &mi, sizeof(MODULEINFO));
-      CloseHandle(hModule);
-      return mi;
-    }
-
-    static uintptr_t GetModuleBase(string moduleName, DWORD pid)
-    {
-      uintptr_t addr = 0;
-      HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);
-
-      if (hSnap != INVALID_HANDLE_VALUE)
-      {
-        MODULEENTRY32 me;
-        me.dwSize = sizeof(me);
-        if (Module32First(hSnap, &me))
-        {
-          do {
-            if (!_wcsicmp(me.szModule, toWstring(moduleName).c_str()))
-            {
-              addr = (uintptr_t)me.modBaseAddr;
-              break;
-            }
-          } while (Module32Next(hSnap, &me));
-        }
-      }
-      CloseHandle(hSnap);
-      return addr;
-    }
+    static uintptr_t GetModuleBase(string moduleName, DWORD pid);
 
     // 去掉首尾空格，返回新的string
-    static string string_trim(string str)
-    {
-      string r = regex_replace(str, regex("^\\s+"), "");
-      r = regex_replace(r, regex("\\s+$"), "");
-      return r;
-    }
+    static string string_trim(string str);
 
     /*
     ## 使用正则表达式分割字符串
@@ -341,35 +279,10 @@ namespace GameCheat
     vector<string> r = string_split(str, regex("\\s+"));
     ```
     */
-    static vector<string> string_split(string str, regex reg)
-    {
-      smatch m;
-      string::const_iterator iterStart = str.begin();
-      string::const_iterator iterEnd = str.end();
-
-      vector<string> resultSplitList = {};
-
-      while (regex_search(iterStart, iterEnd, m, reg))
-      {
-        resultSplitList.emplace_back(iterStart, m[0].first);
-        iterStart = m[0].second;
-      }
-      resultSplitList.emplace_back(iterStart, iterEnd);
-      return resultSplitList;
-    }
+    static vector<string> string_split(string str, regex reg);
 
     /* "01 02" to { 0x01, 0x02 } */
-    static vector<BYTE> byteStr2Bytes(string byteStr)
-    {
-      byteStr = string_trim(byteStr);
-      vector<string> byteStrList = string_split(byteStr, regex("[\\s\\n]+"));
-      vector<BYTE> byteValList = {};
-      for (size_t i = 0; i < byteStrList.size(); i++)
-      {
-        byteValList.push_back(stoi(byteStrList[i], nullptr, 16));
-      }
-      return byteValList;
-    }
+    static vector<BYTE> byteStr2Bytes(string byteStr);
   public:
 
     /* game name 如: game.exe */
@@ -436,12 +349,11 @@ namespace GameCheat
 
     ```c++
       BYTE* addr = (BYTE*)gc.mi.lpBaseOfDll + 0x2B08C;
-      GameCheat::SetNopStruct setNop;
-      setNop.bSuccess = gc.setNop(addr, 6, &setNop);
+      GameCheat::SetNop setNop = gc.setNop(addr, 6);
       setNop.toggle();
     ```
     */
-    bool setNop(BYTE* addr, size_t size, SetNop* setNopData);
+    SetNop setNop(BYTE* addr, size_t size);
 
     /*
      传递RVA地址 
@@ -449,16 +361,14 @@ namespace GameCheat
       gc.setNopRVA(0x2B08C, 6, &setNop);
      ```
     */
-    bool setNopRVA(uintptr_t addrRVA, size_t size, SetNop* setNopData);
+    SetNop setNopRVA(uintptr_t addrRVA, size_t size);
 
     /*
     * ## 绕行挂钩 失败返回false
     ```
-    bool pSuccess = false;
     BYTE* addr = (BYTE*)(gc.mi.lpBaseOfDll) + 0x1575;
-    SetHookStruct setHookStruct = gc.setHook(addr, 5, vector<BYTE>{0xA3, 0x24, 0x37, 0x4B, 0x00}, &pSuccess);
-
-    if (pSuccess) setHookStruct.toggle();
+    GameCheat::SetHook r = gc.setHook(addr, 5, vector<BYTE>{0xA3, 0x24, 0x37, 0x4B, 0x00});
+    r.toggle();
      ```
 
      ```
@@ -467,13 +377,11 @@ namespace GameCheat
       0x81, 0xC6, 0xE8, 0x03, 0x00, 0x00, // add esi,000003E8
       0x89, 0xB7, 0x78, 0x55, 0x00, 0x00 // mov [edi+00005578],esi
     };
-    SetHookStruct setHookStruct;
-    bool pSuccess = gc.setHook(addr, 6, codes, &setHookStruct);
-
-    if (pSuccess) setHookStruct.toggle();
+    GameCheat::SetHook r = gc.setHook(addr, 6, codes);
+    r.toggle();
      ```
     */
-    bool setHook(BYTE* addr, size_t size, vector<BYTE> hookBytes, SetHook* setHookStruct);
+    SetHook setHook(BYTE* addr, size_t size, vector<BYTE> hookBytes);
 
     /*
     * ## 在模块中扫描字节集
@@ -493,16 +401,13 @@ namespace GameCheat
       0x81, 0xC6, 0xE8, 0x03, 0x00, 0x00, // add esi,000003E8
       0x89, 0xB7, 0x78, 0x55, 0x00, 0x00 // mov [edi+00005578],esi
     };
-    SetHookStruct setHookStruct;
-    bool pSuccess = gc.moduleScan(bytes, codes, &setHookStruct);
-
+    GameCheat::SetHook r = gc.moduleScan(bytes, codes);
     ```
     */
-    bool moduleScan(vector<BYTE> bytes, size_t offset, size_t size, vector<BYTE> hookBytes,
-      SetHook* setHookStruct, string mask);
-    bool moduleScan(vector<BYTE> bytes, size_t offset, size_t size, vector<BYTE> hookBytes, SetHook* setHookStruct);
-    bool moduleScan(vector<BYTE> bytes, vector<BYTE> hookBytes, SetHook* setHookStruct, string mask);
-    bool moduleScan(vector<BYTE> bytes, vector<BYTE> hookBytes, SetHook* setHookStruct);
+    SetHook moduleScan(vector<BYTE> bytes, size_t offset, size_t size, vector<BYTE> hookBytes, string mask);
+    SetHook moduleScan(vector<BYTE> bytes, size_t offset, size_t size, vector<BYTE> hookBytes);
+    SetHook moduleScan(vector<BYTE> bytes, vector<BYTE> hookBytes, string mask);
+    SetHook moduleScan(vector<BYTE> bytes, vector<BYTE> hookBytes);
 
     /*
     # hex字符串参数
@@ -514,15 +419,13 @@ namespace GameCheat
       0x81, 0xC6, 0xE8, 0x03, 0x00, 0x00, // add esi,000003E8
       0x89, 0xB7, 0x78, 0x55, 0x00, 0x00 // mov [edi+00005578],esi
     };
-    SetHookStruct setHookStruct;
-    bool pSuccess = gc.moduleScan("89 B7 78 55 00 00", codes, &setHookStruct);
+    GameCheat::SetHook r = gc.moduleScan("89 B7 78 55 00 00", codes);
     ```
     */
-    bool moduleScan(string bytes, size_t offset, size_t size, vector<BYTE> hookBytes,
-      SetHook* setHookStruct, string mask);
-    bool moduleScan(string bytes, size_t offset, size_t size, vector<BYTE> hookBytes, SetHook* setHookStruct);
-    bool moduleScan(string bytes, vector<BYTE> hookBytes, SetHook* setHookStruct, string mask);
-    bool moduleScan(string bytes, vector<BYTE> hookBytes, SetHook* setHookStruct);
+    SetHook moduleScan(string bytes, size_t offset, size_t size, vector<BYTE> hookBytes, string mask);
+    SetHook moduleScan(string bytes, size_t offset, size_t size, vector<BYTE> hookBytes);
+    SetHook moduleScan(string bytes, vector<BYTE> hookBytes, string mask);
+    SetHook moduleScan(string bytes, vector<BYTE> hookBytes);
 
 
     /*
@@ -569,12 +472,11 @@ namespace GameCheat
     #endif // _WIN64
     }
 
-    GameCheat::SetHookStruct setHookStruct;
-    bool bSuccess = gc.callHook((BYTE*)gc.mi.lpBaseOfDll + 0x2B08C, 6, (BYTE*)&myHook, &setHookStruct);
-    if (bSuccess) setHookStruct.toggle();
+    GameCheat::SetHook r = gc.callHook((BYTE*)gc.mi.lpBaseOfDll + 0x2B08C, 6, (BYTE*)&myHook);
+    r.toggle();
     ```
     */
-    bool callHook(BYTE* addr, size_t size, BYTE* hook, SetHook* setHookStruct);
+    SetHook callHook(BYTE* addr, size_t size, BYTE* hook);
 
     /*
     ## 开启一个控制台
@@ -599,6 +501,7 @@ namespace GameCheat
     # 申请虚拟内存，务必调用这个函数
     */
     LPVOID getVirtualAlloc(size_t size);
+    uintptr_t toVA(uintptr_t rva);
   private:
     /* 在x64如果指针不在2-4GB则无法跳转 */
     BYTE* registerHookAddrBase = 0;
