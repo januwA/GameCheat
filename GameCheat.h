@@ -268,7 +268,7 @@ namespace GameCheat
 
     static MODULEINFO GetModuleInfo(string moduleName, HANDLE hProcess);
 
-    static uintptr_t GetModuleBase(string moduleName, DWORD pid);
+    static MODULEINFO GetModuleBase(string moduleName, DWORD pid);
 
     // 去掉首尾空格，返回新的string
     static string string_trim(string str);
@@ -301,6 +301,7 @@ namespace GameCheat
     vector<BYTE*> newmems = {};
 
     GC(string gameName);
+    GC(DWORD pid);
     ~GC();
 
 

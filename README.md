@@ -104,7 +104,9 @@ dealloc(bMs)
 // ---------- DONE INJECTING  ----------
 ```
 
-## 使用C++钩住函数并传递寄存器表
+## 使用C++钩住指令并传递寄存器表
+- 这个函数并不能做函数拦截，它会造成无限递归
+
 ```c++
 #include "pch.h"
 #include <iostream>

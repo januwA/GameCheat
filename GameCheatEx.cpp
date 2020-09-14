@@ -409,6 +409,19 @@ GameCheatEx::GC::GC(string gameName)
 
   mi = GetModuleBase(gameName, pid);
 }
+GameCheatEx::GC::GC(DWORD pid)
+{
+  if (!pid) return;
+  this->pid = pid;
+  hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
+  if (!hProcess) return;
+
+  char text[2014];
+  GetModuleBaseNameA(hProcess, 0, text, 1024);
+  gameName = string(text);
+
+  mi = GetModuleBase(gameName, pid);
+}
 
 GameCheatEx::GC::~GC()
 {

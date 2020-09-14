@@ -1,5 +1,4 @@
-﻿#include "pch.h"
-#include "GameCheat.h"
+﻿#include "GameCheat.h"
 
 wstring GameCheat::GC::toWstring(string str)
 {
@@ -34,7 +33,6 @@ DWORD GameCheat::GC::GetPID(string gameName)
 
 MODULEINFO GameCheat::GC::GetModuleInfo(string moduleName, HANDLE hProcess)
 {
-
   MODULEINFO mi{ 0 };
   HMODULE hModule = GetModuleHandleW(toWstring(moduleName).c_str());
   if (hModule == 0) return mi;
@@ -42,13 +40,11 @@ MODULEINFO GameCheat::GC::GetModuleInfo(string moduleName, HANDLE hProcess)
   GetModuleInformation(hProcess, hModule, &mi, sizeof(MODULEINFO));
   CloseHandle(hModule);
   return mi;
-
 }
 
-uintptr_t GameCheat::GC::GetModuleBase(string moduleName, DWORD pid)
+MODULEINFO GameCheat::GC::GetModuleBase(string moduleName, DWORD pid)
 {
-
-  uintptr_t addr = 0;
+  MODULEINFO mi{ 0 };
   HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);
 
   if (hSnap != INVALID_HANDLE_VALUE)
@@ -60,15 +56,15 @@ uintptr_t GameCheat::GC::GetModuleBase(string moduleName, DWORD pid)
       do {
         if (!_wcsicmp(me.szModule, toWstring(moduleName).c_str()))
         {
-          addr = (uintptr_t)me.modBaseAddr;
+          mi.SizeOfImage = (uintptr_t)me.modBaseAddr;
+          mi.SizeOfImage = me.modBaseSize;
           break;
         }
       } while (Module32Next(hSnap, &me));
     }
   }
   CloseHandle(hSnap);
-  return addr;
-
+  return mi;
 }
 
 string GameCheat::GC::string_trim(string str)
@@ -122,7 +118,21 @@ GameCheat::GC::GC(string gameName)
   hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
   if (!hProcess) return;
 
-  mi = GetModuleInfo(gameName, hProcess);
+  mi = GetModuleBase(gameName, pid);
+}
+
+GameCheat::GC::GC(DWORD pid)
+{
+  if (!pid) return;
+  this->pid = pid;
+  hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
+  if (!hProcess) return;
+
+  char text[2014];
+  GetModuleBaseNameA(hProcess, 0, text, 1024);
+  gameName = string(text);
+
+  mi = GetModuleBase(gameName, pid);
 }
 
 GameCheat::GC::~GC()

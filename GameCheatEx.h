@@ -284,6 +284,7 @@ namespace GameCheatEx
     vector<BYTE*> newmems = {};
 
     GC(string gameName);
+    GC(DWORD pid);
     ~GC();
 
     uintptr_t getAddress(vector<uintptr_t> offsets);
