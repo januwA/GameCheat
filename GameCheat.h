@@ -264,11 +264,11 @@ namespace GameCheat
     static wstring toWstring(string str);
 
     /* 获取processID */
-    static DWORD GetPID(string gameName);
+    static DWORD GetPID(wstring gameName);
 
-    static MODULEINFO GetModuleInfo(string moduleName, HANDLE hProcess);
+    static MODULEINFO GetModuleInfo(wstring moduleName, HANDLE hProcess);
 
-    static MODULEINFO GetModuleBase(string moduleName, DWORD pid);
+    static MODULEINFO GetModuleBase(wstring moduleName, DWORD pid);
 
     // 去掉首尾空格，返回新的string
     static string string_trim(string str);
@@ -286,7 +286,7 @@ namespace GameCheat
   public:
 
     /* game name 如: game.exe */
-    string gameName;
+    wstring gameName;
 
     /* 进程id */
     DWORD pid;
@@ -300,7 +300,7 @@ namespace GameCheat
     /* 申请的所有虚拟内存地址 */
     vector<BYTE*> newmems = {};
 
-    GC(string gameName);
+    GC(wstring gameName);
     GC(DWORD pid);
     ~GC();
 

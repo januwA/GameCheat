@@ -1,11 +1,12 @@
-﻿#include "GameCheat.h"
+﻿#include "pch.h"
+#include "GameCheat.h"
 
 wstring GameCheat::GC::toWstring(string str)
 {
   return wstring(str.begin(), str.end());
 }
 
-DWORD GameCheat::GC::GetPID(string gameName)
+DWORD GameCheat::GC::GetPID(wstring gameName)
 {
   DWORD pid = 0;
   HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
@@ -17,7 +18,7 @@ DWORD GameCheat::GC::GetPID(string gameName)
     {
       do
       {
-        if (!_wcsicmp(pe.szExeFile, toWstring(gameName).c_str()))
+        if (!_wcsicmp(pe.szExeFile, gameName.c_str()))
         {
           pid = pe.th32ProcessID;
           break;
@@ -31,10 +32,10 @@ DWORD GameCheat::GC::GetPID(string gameName)
 
 }
 
-MODULEINFO GameCheat::GC::GetModuleInfo(string moduleName, HANDLE hProcess)
+MODULEINFO GameCheat::GC::GetModuleInfo(wstring moduleName, HANDLE hProcess)
 {
   MODULEINFO mi{ 0 };
-  HMODULE hModule = GetModuleHandleW(toWstring(moduleName).c_str());
+  HMODULE hModule = GetModuleHandleW(moduleName.c_str());
   if (hModule == 0) return mi;
   // 在MODULEINFO结构中检索有关指定模块的信息
   GetModuleInformation(hProcess, hModule, &mi, sizeof(MODULEINFO));
@@ -42,7 +43,7 @@ MODULEINFO GameCheat::GC::GetModuleInfo(string moduleName, HANDLE hProcess)
   return mi;
 }
 
-MODULEINFO GameCheat::GC::GetModuleBase(string moduleName, DWORD pid)
+MODULEINFO GameCheat::GC::GetModuleBase(wstring moduleName, DWORD pid)
 {
   MODULEINFO mi{ 0 };
   HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);
@@ -54,7 +55,7 @@ MODULEINFO GameCheat::GC::GetModuleBase(string moduleName, DWORD pid)
     if (Module32First(hSnap, &me))
     {
       do {
-        if (!_wcsicmp(me.szModule, toWstring(moduleName).c_str()))
+        if (!_wcsicmp(me.szModule, moduleName.c_str()))
         {
           mi.SizeOfImage = (uintptr_t)me.modBaseAddr;
           mi.SizeOfImage = me.modBaseSize;
@@ -109,30 +110,21 @@ vector<BYTE> GameCheat::GC::byteStr2Bytes(string byteStr)
 
 }
 
-GameCheat::GC::GC(string gameName)
+GameCheat::GC::GC(wstring gameName)
 {
   this->gameName = gameName;
-  pid = GetPID(gameName);
-  if (!pid) return;
-
-  hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
-  if (!hProcess) return;
-
-  mi = GetModuleBase(gameName, pid);
+  this->pid = GetPID(gameName);
+  this->hProcess = GetCurrentProcess();
+  this->mi = GetModuleBase(gameName, pid);
 }
 
 GameCheat::GC::GC(DWORD pid)
 {
-  if (!pid) return;
   this->pid = pid;
-  hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
-  if (!hProcess) return;
-
-  char text[2014];
-  GetModuleBaseNameA(hProcess, 0, text, 1024);
-  gameName = string(text);
-
-  mi = GetModuleBase(gameName, pid);
+  this->hProcess = GetCurrentProcess();
+  this->gameName.resize(1024);
+  GetModuleBaseNameW(hProcess, 0, (LPWSTR)gameName.data(), 1024);
+  this->mi = GetModuleBase(gameName, pid);
 }
 
 GameCheat::GC::~GC()
