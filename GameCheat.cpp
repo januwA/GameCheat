@@ -1,9 +1,24 @@
 ﻿#include "pch.h"
 #include "GameCheat.h"
 
-wstring GameCheat::GC::toWstring(string str)
+wstring GameCheat::GC::s2ws(string s1)
 {
-  return wstring(str.begin(), str.end());
+  setlocale(LC_ALL, "chs");
+  wstring s2;
+  s2.resize(s1.length());
+
+  MultiByteToWideChar(CP_ACP, 0, s1.c_str(), s1.length(), (LPWSTR)s2.data(), s2.length());
+  return s2;
+}
+
+string GameCheat::GC::ws2s(wstring s1)
+{
+  setlocale(LC_ALL, "chs");
+  string s2;
+  s2.resize(s1.length() * 2);
+
+  WideCharToMultiByte(CP_ACP, 0, s1.data(), s1.length(), (LPSTR)s2.data(), s2.length(), 0, 0);
+  return s2;
 }
 
 DWORD GameCheat::GC::GetPID(wstring gameName)

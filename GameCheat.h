@@ -261,7 +261,10 @@ namespace GameCheat
   public:
 
     /* string to wstring */
-    static wstring toWstring(string str);
+    static wstring s2ws(string str);
+
+    /* wstring to string */
+    static string ws2s(wstring str);
 
     /* 获取processID */
     static DWORD GetPID(wstring gameName);
