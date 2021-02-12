@@ -19,16 +19,16 @@ namespace GameCheatEx
   class HookBase
   {
   public:
-    HANDLE hProcess;
+    HANDLE hProcess{};
 
     // 拷贝的原始字节
     vector<BYTE> origenBytes = {};
 
     // 挂钩的地址
-    BYTE* addr;
+    BYTE* addr{};
 
     // 字节大小
-    size_t size;
+    size_t size{};
 
     // 是否开启
     bool bEnable = false;
@@ -55,8 +55,8 @@ namespace GameCheatEx
   {
   public:
     // hook 函数/bytes 地址
-    BYTE* hookAddr;
-    DWORD jmpHookBytes;
+    BYTE* hookAddr{};
+    DWORD jmpHookBytes{ 0 };
     void enableHook()
     {
       WriteProcessMemory(hProcess, (LPVOID)addr, (LPCVOID)&JMP_BYTE, sizeof(BYTE), 0);
@@ -229,16 +229,16 @@ namespace GameCheatEx
   public:
 
     /*
-      对于外部作弊，需要手动算出寄存器在堆栈上的指针，将每隔值设置为指针，然后使用Write/ReadProcessMemory去读写这些寄存器
+      对于外部作弊，需要手动算出寄存器在堆栈上的指针，将每个值设置为指针，然后使用Write/ReadProcessMemory去读写这些寄存器
     */
     static GameCheatEx::Regs getRegs(uintptr_t lpRegs);
     /*
      ## 在目标进程创建一个函数，调用本地函数
-     return func address
+     return function address
     */
     static BYTE* createCallLocalFunction(HANDLE hProcess, uintptr_t lplocalFun);
   
-    /* 获取目标程序的模块的导出表中找到函数的地址 */
+    /* 获取目标程序的模块的导出表中找到函数的地址, return function address */
     static uintptr_t GetProcAddressEx(HANDLE hProcess, string modName, string exportFunName);
 
     static BYTE* memsetEx(HANDLE hProcess, BYTE* targetAddr, BYTE val, size_t size);
@@ -281,11 +281,14 @@ namespace GameCheatEx
     /* game 进程句柄 */
     HANDLE hProcess;
 
-    /* nameProcessName的模块信息 */
+    /* 主模块的信息 */
     MODULEINFO mi;
 
     /* 申请的所有虚拟内存地址 */
     vector<BYTE*> newmems = {};
+    
+    /* freopen_s 使用 */
+    FILE* f;
 
     GC(string gameName);
     GC(DWORD pid);
@@ -469,23 +472,16 @@ namespace GameCheatEx
     */
     SetHook callHook(BYTE* addr, size_t size, BYTE* hook);
 
-    /*
-    ## 开启一个控制台
-    ```c++
-    GameCheat gc{ "game2.exe" };
-    FILE* f;
-    gc.openConsole(&f);
-    printf("INJECT OK\n");
-    ```
-    */
+    /* 开启控制台 */
+    void openConsole();
+
+    /* 关闭控制台 */
+    void closeConsole();
+
+    /* 开启控制台 FILE* f; gc.openConsole(&f); */
     void openConsole(FILE** f);
 
-    /*
-    ## 关闭一个控制台
-    ```c++
-    gc.closeConsole(f);
-    ```
-    */
+    /* 关闭控制台 gc.closeConsole(f); */
     void closeConsole(FILE* f);
 
     /*

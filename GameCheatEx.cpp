@@ -138,7 +138,7 @@ BYTE* GameCheatEx::GC::createCallLocalFunction(HANDLE hProcess, uintptr_t lploca
   // call CreateRemoteThread
   001C- 6A 00                 - push 00
   001E- 6A 00                 - push 00
-  0020- FF 75 08              - push [ebp+08] { localfun param }
+  0020- FF 75 08              - push [ebp+08] { local fun param, 本地函数有一个可接收的参数 }
   0023- 68 50102100           - push 00211050 { local funAddr }
   0028- 6A 00                 - push 00
   002A- 6A 00                 - push 00
@@ -177,24 +177,32 @@ BYTE* GameCheatEx::GC::createCallLocalFunction(HANDLE hProcess, uintptr_t lploca
 #endif // _WIN64
 
   BYTE* newmem = (BYTE*)VirtualAllocEx(hProcess, 0, funcode.size(), MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
-  WriteProcessMemory(hProcess, newmem, funcode.data(), funcode.size(), 0);
+  if (newmem == NULL) 
+  {
+    printf("VirtualAllocEx error.");
+    return 0;
+  }
+  WriteProcessMemory(hProcess, newmem, funcode.data(), funcode.size(), NULL);
   return newmem;
-
 }
 
 uintptr_t GameCheatEx::GC::GetProcAddressEx(HANDLE hProcess, string modName, string exportFunName)
 {
-
   MODULEINFO mi = GameCheatEx::GC::GetModuleBase(modName, GetProcessId(hProcess));
   uintptr_t moduleBaseAddr = (uintptr_t)mi.lpBaseOfDll;
+  if (moduleBaseAddr == NULL)
+  {
+    printf("not find module(%s)\n", modName.c_str());
+    return NULL;
+  }
 
   // is PE FILE ?
   WORD e_magic = 0;
   ReadProcessMemory(hProcess, (LPCVOID)moduleBaseAddr, &e_magic, sizeof(WORD), 0);
   if (e_magic != 0x5A4D)
   {
-    printf("not PE file.\n");
-    return 0;
+    printf("Not a PE file.\n");
+    return NULL;
   }
 
   // get ntHeader offset
@@ -217,7 +225,7 @@ uintptr_t GameCheatEx::GC::GetProcAddressEx(HANDLE hProcess, string modName, str
   if (!exportEntry.Size)
   {
     printf("not export table. \n");
-    return 0;
+    return NULL;
   }
   auto RVA2VA = [&](uintptr_t rva) -> uintptr_t
   {
@@ -228,19 +236,19 @@ uintptr_t GameCheatEx::GC::GetProcAddressEx(HANDLE hProcess, string modName, str
 
   // the number of use name export function
   DWORD NumberOfNames = 0;
-  ReadProcessMemory(hProcess, (LPCVOID)(exportDirDataAddr + 0x18), &NumberOfNames, sizeof(DWORD), 0);
+  ReadProcessMemory(hProcess, (LPCVOID)(exportDirDataAddr + 0x18), &NumberOfNames, sizeof(DWORD), NULL);
 
   DWORD AddressOfFunctions = 0;
-  ReadProcessMemory(hProcess, (LPCVOID)(exportDirDataAddr + 0x1C), &AddressOfFunctions, sizeof(DWORD), 0);
+  ReadProcessMemory(hProcess, (LPCVOID)(exportDirDataAddr + 0x1C), &AddressOfFunctions, sizeof(DWORD), NULL);
   DWORD* AddressOfFunctionsVA = (DWORD*)RVA2VA(AddressOfFunctions);
 
   // function name table
   DWORD AddressOfNames = 0;
-  ReadProcessMemory(hProcess, (LPCVOID)(exportDirDataAddr + 0x20), &AddressOfNames, sizeof(DWORD), 0);
+  ReadProcessMemory(hProcess, (LPCVOID)(exportDirDataAddr + 0x20), &AddressOfNames, sizeof(DWORD), NULL);
   DWORD* AddressOfNamesVA = (DWORD*)RVA2VA(AddressOfNames);
 
   DWORD AddressOfNameOrdinals = 0;
-  ReadProcessMemory(hProcess, (LPCVOID)(exportDirDataAddr + 0x24), &AddressOfNameOrdinals, sizeof(DWORD), 0);
+  ReadProcessMemory(hProcess, (LPCVOID)(exportDirDataAddr + 0x24), &AddressOfNameOrdinals, sizeof(DWORD), NULL);
   WORD* AddressOfNameOrdinalsVA = (WORD*)RVA2VA(AddressOfNameOrdinals);
 
   auto readASCII = [&](uintptr_t addr, char* name) -> void
@@ -249,7 +257,7 @@ uintptr_t GameCheatEx::GC::GetProcAddressEx(HANDLE hProcess, string modName, str
     char c;
     while (true)
     {
-      ReadProcessMemory(hProcess, (LPCVOID)(addr + i), &c, sizeof(BYTE), 0);
+      ReadProcessMemory(hProcess, (LPCVOID)(addr + i), &c, sizeof(BYTE), NULL);
       name[i] = c;
       if (!c) break;
       i++;
@@ -257,28 +265,33 @@ uintptr_t GameCheatEx::GC::GetProcAddressEx(HANDLE hProcess, string modName, str
   };
 
   DWORD itRVA = 0;
-  char funName[1024];
+  char funName[1024] = {0};
   size_t funNameIndex = 0;
+  BOOL isFind = FALSE;
   for (; funNameIndex < NumberOfNames; funNameIndex++)
   {
-    ReadProcessMemory(hProcess, AddressOfNamesVA + funNameIndex, &itRVA, sizeof(DWORD), 0);
-    readASCII(moduleBaseAddr + itRVA, funName);
+    ReadProcessMemory(hProcess, AddressOfNamesVA + funNameIndex, &itRVA, sizeof(DWORD), NULL);
+    readASCII(RVA2VA(itRVA), funName);
     if (!strcmp(funName, exportFunName.c_str()))
+    {
+      isFind = TRUE;
       break;
+    }
   }
 
-  if (strlen(funName) == 0)
+  if (!isFind)
   {
-    return 0;
+    printf("not find function(%s)\n", exportFunName.c_str());
+    return NULL;
   }
 
   // get function address index
   WORD AddressOfFunctionsIndex = 0;
-  ReadProcessMemory(hProcess, AddressOfNameOrdinalsVA + funNameIndex, &AddressOfFunctionsIndex, sizeof(WORD), 0);
+  ReadProcessMemory(hProcess, AddressOfNameOrdinalsVA + funNameIndex, &AddressOfFunctionsIndex, sizeof(WORD), NULL);
 
   // get function address
   DWORD funAddrRVA = 0;
-  ReadProcessMemory(hProcess, AddressOfFunctionsVA + AddressOfFunctionsIndex, &funAddrRVA, sizeof(DWORD), 0);
+  ReadProcessMemory(hProcess, AddressOfFunctionsVA + AddressOfFunctionsIndex, &funAddrRVA, sizeof(DWORD), NULL);
   return RVA2VA(funAddrRVA);
 
 }
@@ -286,11 +299,8 @@ uintptr_t GameCheatEx::GC::GetProcAddressEx(HANDLE hProcess, string modName, str
 BYTE* GameCheatEx::GC::memsetEx(HANDLE hProcess, BYTE* targetAddr, BYTE val, size_t size)
 {
   for (size_t i = 0; i < size; i++)
-  {
-    WriteProcessMemory(hProcess, targetAddr + i, &val, sizeof(BYTE), 0);
-  }
+    WriteProcessMemory(hProcess, targetAddr + i, &val, sizeof(BYTE), NULL);
   return targetAddr;
-
 }
 
 wstring GameCheatEx::GC::s2ws(string s1)
@@ -298,7 +308,6 @@ wstring GameCheatEx::GC::s2ws(string s1)
   setlocale(LC_ALL, "chs");
   wstring s2;
   s2.resize(s1.length());
-
   MultiByteToWideChar(CP_ACP, 0, s1.c_str(), s1.length(), (LPWSTR)s2.data(), s2.length());
   return s2;
 }
@@ -308,11 +317,9 @@ string GameCheatEx::GC::ws2s(wstring s1)
   setlocale(LC_ALL, "chs");
   string s2;
   s2.resize(s1.length() * 2);
-
   WideCharToMultiByte(CP_ACP, 0, s1.data(), s1.length(), (LPSTR)s2.data(), s2.length(), 0, 0);
   return s2;
 }
-
 
 DWORD GameCheatEx::GC::GetPID(string gameName)
 {
@@ -326,7 +333,7 @@ DWORD GameCheatEx::GC::GetPID(string gameName)
     {
       do
       {
-        if (!_wcsicmp(pe.szExeFile, toWstring(gameName).c_str()))
+        if (!_wcsicmp(pe.szExeFile, s2ws(gameName).c_str()))
         {
           pid = pe.th32ProcessID;
           break;
@@ -343,7 +350,7 @@ DWORD GameCheatEx::GC::GetPID(string gameName)
 MODULEINFO GameCheatEx::GC::GetModuleInfo(string moduleName, HANDLE hProcess)
 {
   MODULEINFO mi{ 0 };
-  HMODULE hModule = GetModuleHandleW(toWstring(moduleName).c_str());
+  HMODULE hModule = GetModuleHandleW( s2ws(moduleName).c_str());
   if (hModule == 0) return mi;
   // 在MODULEINFO结构中检索有关指定模块的信息
   GetModuleInformation(hProcess, hModule, &mi, sizeof(MODULEINFO));
@@ -364,7 +371,7 @@ MODULEINFO GameCheatEx::GC::GetModuleBase(string moduleName, DWORD pid)
     if (Module32First(hSnap, &me))
     {
       do {
-        if (!_wcsicmp(me.szModule, toWstring(moduleName).c_str()))
+        if (!_wcsicmp(me.szModule, s2ws(moduleName).c_str()))
         {
           mi.lpBaseOfDll = me.modBaseAddr;
           mi.SizeOfImage = me.modBaseSize;
@@ -418,19 +425,29 @@ GameCheatEx::GC::GC(string gameName)
 {
   this->gameName = gameName;
   pid = GetPID(gameName);
-  if (!pid) return;
+  if (!pid)
+  {
+    printf("GetPID error.");
+    throw;
+  }
 
   hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
-  if (!hProcess) return;
+  if (!hProcess)
+  {
+    printf("OpenProcess error.");
+    throw;
+  }
 
   mi = GetModuleBase(gameName, pid);
 }
 GameCheatEx::GC::GC(DWORD pid)
 {
-  if (!pid) return;
   this->pid = pid;
   hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
-  if (!hProcess) return;
+  if (!hProcess) 
+  {
+    throw "OpenProcess error.";
+  };
 
   char text[2014];
   GetModuleBaseNameA(hProcess, 0, text, 1024);
@@ -458,7 +475,7 @@ GameCheatEx::SetNop GameCheatEx::GC::setNop(BYTE* addr, size_t size)
   GameCheatEx::SetNop r;
   vector<BYTE> origenBytes = {};
   origenBytes.resize(size);
-  ReadProcessMemory(hProcess, addr, origenBytes.data(), size, 0);
+  ReadProcessMemory(hProcess, addr, origenBytes.data(), size, NULL);
 
   r.hProcess = hProcess;
   r.origenBytes = origenBytes;
@@ -755,6 +772,15 @@ GameCheatEx::SetHook GameCheatEx::GC::callHook(BYTE* addr, size_t size, BYTE* ho
   return r;
 }
 
+void GameCheatEx::GC::openConsole()
+{
+  openConsole(&f);
+}
+void GameCheatEx::GC::closeConsole()
+{
+  closeConsole(f);
+}
+
 void GameCheatEx::GC::openConsole(FILE** f)
 {
   AllocConsole();
@@ -855,7 +881,7 @@ void GameCheatEx::HookBase::enable()
   VirtualProtectEx(hProcess, addr, size, PAGE_EXECUTE_READWRITE, &oldProc);
   GameCheatEx::GC::memsetEx(hProcess, addr, 0x90, size);
   this->enableHook();
-  VirtualProtectEx(hProcess, addr, size, oldProc, 0);
+  VirtualProtectEx(hProcess, addr, size, oldProc, &oldProc);
 
   if (!msg.empty())
     printf("[enable]  %s\n", msg.c_str());
@@ -871,7 +897,7 @@ void GameCheatEx::HookBase::disable()
   DWORD oldProc;
   VirtualProtectEx(hProcess, addr, size, PAGE_EXECUTE_READWRITE, &oldProc);
   WriteProcessMemory(hProcess, addr, origenBytes.data(), size, 0);
-  VirtualProtectEx(hProcess, addr, size, oldProc, 0);
+  VirtualProtectEx(hProcess, addr, size, oldProc, &oldProc);
 
   if (!msg.empty())
     printf("[disable] %s\n", msg.c_str());
